@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
@@ -11,75 +10,14 @@ from blazefl.contrib import (
     FedAvgBaseServerHandler,
     FedAvgProcessPoolClientTrainer,
 )
-from blazefl.contrib.fedavg import FedAvgDownlinkPackage, FedAvgUplinkPackage
-from blazefl.core import ModelSelector, PartitionedDataset, ThreadPoolClientTrainer
+from blazefl.contrib.fedavg import (
+    FedAvgThreadPoolClientTrainer,
+)
 from blazefl.utils import seed_everything
 from omegaconf import DictConfig, OmegaConf
 
 from dataset import PartitionedCIFAR10
 from models import FedAvgModelSelector
-
-
-class FedAvgMultiThreadClientTrainer(
-    ThreadPoolClientTrainer[
-        FedAvgUplinkPackage,
-        FedAvgDownlinkPackage,
-    ]
-):
-    def __init__(
-        self,
-        model_selector: ModelSelector,
-        model_name: str,
-        dataset: PartitionedDataset,
-        device: str,
-        num_clients: int,
-        epochs: int,
-        batch_size: int,
-        lr: float,
-        seed: int,
-        num_parallels: int,
-    ) -> None:
-        self.num_parallels = num_parallels
-        self.device = device
-        if self.device == "cuda":
-            self.device_count = torch.cuda.device_count()
-        self.cache: list[FedAvgUplinkPackage] = []
-
-        self.model_selector = model_selector
-        self.model_name = model_name
-        self.dataset = dataset
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.lr = lr
-        self.num_clients = num_clients
-        self.seed = seed
-
-    def worker(
-        self,
-        cid: int,
-        device: str,
-        payload: FedAvgDownlinkPackage,
-    ) -> FedAvgUplinkPackage:
-        model = self.model_selector.select_model(self.model_name)
-        train_loader = self.dataset.get_dataloader(
-            type_="train",
-            cid=cid,
-            batch_size=self.batch_size,
-        )
-        package = FedAvgProcessPoolClientTrainer.train(
-            model=model,
-            model_parameters=payload.model_parameters,
-            train_loader=train_loader,
-            device=device,
-            epochs=self.epochs,
-            lr=self.lr,
-        )
-        return package
-
-    def uplink_package(self) -> list[FedAvgUplinkPackage]:
-        package = deepcopy(self.cache)
-        self.cache = []
-        return package
 
 
 class FedAvgPipeline:
@@ -88,7 +26,7 @@ class FedAvgPipeline:
         handler: FedAvgBaseServerHandler,
         trainer: FedAvgBaseClientTrainer
         | FedAvgProcessPoolClientTrainer
-        | FedAvgMultiThreadClientTrainer,
+        | FedAvgThreadPoolClientTrainer,
     ) -> None:
         self.handler = handler
         self.trainer = trainer
@@ -158,7 +96,7 @@ def main(cfg: DictConfig):
     trainer: (
         FedAvgBaseClientTrainer
         | FedAvgProcessPoolClientTrainer
-        | FedAvgMultiThreadClientTrainer
+        | FedAvgThreadPoolClientTrainer
         | None
     ) = None
     match cfg.execution_mode:
@@ -190,7 +128,7 @@ def main(cfg: DictConfig):
                 ipc_mode=cfg.ipc_mode,
             )
         case "multi-thread":
-            trainer = FedAvgMultiThreadClientTrainer(
+            trainer = FedAvgThreadPoolClientTrainer(
                 model_selector=model_selector,
                 model_name=cfg.model_name,
                 dataset=dataset,
