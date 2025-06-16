@@ -1,4 +1,3 @@
-import logging
 import multiprocessing as mp
 import signal
 import threading
@@ -251,6 +250,6 @@ class ThreadPoolClientTrainer(
                     result = future.result()
                     self.cache.append(result)
         except KeyboardInterrupt:
-            logging.warning("Training interrupted by user.")
             self.stop_event.set()
+            raise
         return
