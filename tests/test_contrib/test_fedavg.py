@@ -257,36 +257,13 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     proc.start()
     assert proc.pid is not None
 
-    # spawned_pids = []
-    timeout = 10
-    # start_time = time.time()
-    # while proc.is_alive():
-    # spawned_pids = []
-    # for child in psutil.Process(proc.pid).children(recursive=True):
-    #     spawned_pids.append(child.pid)
-    # if len(spawned_pids) == num_parallels:
-    #     break
-    # if len(mp.active_children()) == num_parallels:
-    #     break
-    # if time.time() - start_time > timeout:
-    #     pytest.fail(
-    #         f"Process did not spawn {num_parallels} processes within {timeout}s"
-    #     )
-    time.sleep(timeout)
+    time.sleep(5)
     assert proc.is_alive()
 
     os.kill(proc.pid, signal.SIGINT)
 
-    proc.join(timeout=10)
+    proc.join(timeout=5)
     assert not proc.is_alive()
-
-    # orphan_pids = []
-    # for pid in spawned_pids:
-    #     if psutil.pid_exists(pid):
-    #         orphan_pids.append(pid)
-    # assert len(orphan_pids) == 0
-    # assert len(mp.active_children()) == 0
-    #
 
 
 def test_base_handler_and_thread_pool_trainer_integration(
