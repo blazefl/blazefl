@@ -1,5 +1,3 @@
-import logging
-import multiprocessing as mp
 import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8,6 +6,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar
 
 import torch
+import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from blazefl.utils import move_tensor_to_shared_memory
@@ -84,6 +83,7 @@ class ProcessPoolClientTrainer(
     device_count: int
     cache: list[UplinkPackage]
     ipc_mode: Literal["storage", "shared_memory"] = "storage"
+    stop_event: threading.Event
 
     def get_client_config(self, cid: int) -> ClientConfig:
         """
@@ -113,7 +113,10 @@ class ProcessPoolClientTrainer(
 
     @staticmethod
     def worker(
-        config: ClientConfig | Path, payload: DownlinkPackage | Path, device: str
+        config: ClientConfig | Path,
+        payload: DownlinkPackage | Path,
+        device: str,
+        stop_event: threading.Event,
     ) -> UplinkPackage | Path:
         """
         Process a single client's training task.
@@ -159,11 +162,13 @@ class ProcessPoolClientTrainer(
         else:  # shared_memory
             move_tensor_to_shared_memory(payload)
 
-        with mp.Pool(
+        self.stop_event.clear()
+        pool = mp.Pool(
             processes=self.num_parallels,
             initializer=signal.signal,
             initargs=(signal.SIGINT, signal.SIG_IGN),
-        ) as pool:
+        )
+        try:
             jobs: list[ApplyResult] = []
             for cid in cid_list:
                 config = self.get_client_config(cid)
@@ -173,12 +178,15 @@ class ProcessPoolClientTrainer(
                     torch.save(config, config_path)
                     jobs.append(
                         pool.apply_async(
-                            self.worker, (config_path, payload_path, device)
+                            self.worker,
+                            (config_path, payload_path, device, self.stop_event),
                         )
                     )
                 else:  # shared_memory
                     jobs.append(
-                        pool.apply_async(self.worker, (config, payload, device))
+                        pool.apply_async(
+                            self.worker, (config, payload, device, self.stop_event)
+                        )
                     )
 
             for job in tqdm(jobs, desc="Client", leave=False):
@@ -189,6 +197,10 @@ class ProcessPoolClientTrainer(
                 else:  # shared_memory
                     package = result
                 self.cache.append(package)
+        finally:
+            self.stop_event.set()
+            pool.close()
+            pool.join()
 
 
 class ThreadPoolClientTrainer(
@@ -199,13 +211,14 @@ class ThreadPoolClientTrainer(
     device: str
     device_count: int
     cache: list[UplinkPackage]
-    stop_event: threading.Event | None
+    stop_event: threading.Event
 
     def worker(
         self,
         cid: int,
         device: str,
         payload: DownlinkPackage,
+        stop_event: threading.Event,
     ) -> UplinkPackage:
         """
         Process a single client's training task in a thread.
@@ -214,6 +227,7 @@ class ThreadPoolClientTrainer(
             cid (int): The client ID.
             device (str): The device to use for processing this client.
             payload (DownlinkPackage): The data package received from the server.
+            stop_event (threading.Event): Event to signal stopping the worker.
 
         Returns:
             UplinkPackage: The uplink package containing the client's results.
@@ -226,31 +240,29 @@ class ThreadPoolClientTrainer(
         return self.device
 
     def local_process(self, payload: DownlinkPackage, cid_list: list[int]) -> None:
-        if self.stop_event is None:
-            self.stop_event = threading.Event()
         self.stop_event.clear()
+        executor = ThreadPoolExecutor(max_workers=self.num_parallels)
         try:
-            with ThreadPoolExecutor(max_workers=self.num_parallels) as executor:
-                futures = []
-                for cid in cid_list:
-                    device = self.get_client_device(cid)
-                    future = executor.submit(
-                        self.worker,
-                        cid,
-                        device,
-                        payload,
-                    )
-                    futures.append(future)
+            futures = []
+            for cid in cid_list:
+                device = self.get_client_device(cid)
+                future = executor.submit(
+                    self.worker,
+                    cid,
+                    device,
+                    payload,
+                    self.stop_event,
+                )
+                futures.append(future)
 
-                for future in tqdm(
-                    as_completed(futures),
-                    total=len(futures),
-                    desc="Client",
-                    leave=False,
-                ):
-                    result = future.result()
-                    self.cache.append(result)
-        except KeyboardInterrupt:
-            logging.warning("Training interrupted by user.")
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Client",
+                leave=False,
+            ):
+                result = future.result()
+                self.cache.append(result)
+        finally:
             self.stop_event.set()
-        return
+            executor.shutdown(wait=True, cancel_futures=True)

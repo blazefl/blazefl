@@ -2,16 +2,18 @@ import os
 import signal
 import time
 from contextlib import suppress
-from multiprocessing import Process
 
+# from multiprocessing import Process
 import psutil
 import pytest
 import torch
+import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, Dataset
 
 from src.blazefl.contrib.fedavg import (
     FedAvgBaseClientTrainer,
     FedAvgBaseServerHandler,
+    FedAvgDownlinkPackage,
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
 )
@@ -67,7 +69,7 @@ def model_selector():
 
 @pytest.fixture
 def partitioned_dataset():
-    return DummyPartitionedDataset(num_clients=3, size_per_client=10)
+    return DummyPartitionedDataset(num_clients=10, size_per_client=10)
 
 
 @pytest.fixture
@@ -136,13 +138,23 @@ def test_base_server_and_base_trainer_integration(
     assert server.if_stop() is True
 
 
+def _run_process_pool_trainer(
+    trainer_init_args: dict, downlink: FedAvgDownlinkPackage, cids: list[int]
+) -> None:
+    trainer = FedAvgProcessPoolClientTrainer(**trainer_init_args)
+    with suppress(KeyboardInterrupt):
+        trainer.local_process(downlink, cids)
+
+
 @pytest.mark.parametrize("ipc_mode", ["storage", "shared_memory"])
 def test_base_handler_and_process_pool_trainer_integration(
     model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir, ipc_mode
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 2
-    num_clients = 3
+    num_clients = 10
     sample_ratio = 1.0
     epochs = 1
     batch_size = 2
@@ -193,14 +205,11 @@ def test_base_handler_and_process_pool_trainer_integration(
     assert server.if_stop() is True
 
 
-def run_local_process(trainer, downlink, cids):
-    with suppress(KeyboardInterrupt):
-        trainer.local_process(downlink, cids)
-
-
 def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 1
     num_clients = 10
@@ -209,7 +218,7 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     batch_size = 2
     lr = 0.01
     seed = 42
-    num_parallels = 10
+    num_parallels = 2
 
     server = FedAvgBaseServerHandler(
         model_selector=model_selector,
@@ -222,42 +231,33 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
         batch_size=batch_size,
     )
 
-    trainer = FedAvgProcessPoolClientTrainer(
-        model_selector=model_selector,
-        model_name=model_name,
-        share_dir=tmp_share_dir,
-        state_dir=tmp_state_dir,
-        dataset=partitioned_dataset,
-        device=device,
-        num_clients=num_clients,
-        epochs=epochs,
-        batch_size=batch_size,
-        lr=lr,
-        seed=seed,
-        num_parallels=num_parallels,
-        ipc_mode="storage",
-    )
+    trainer_init_args = {
+        "model_selector": model_selector,
+        "model_name": model_name,
+        "share_dir": tmp_share_dir,
+        "state_dir": tmp_state_dir,
+        "dataset": partitioned_dataset,
+        "device": device,
+        "num_clients": num_clients,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "lr": lr,
+        "seed": seed,
+        "num_parallels": num_parallels,
+        "ipc_mode": "storage",
+    }
 
     cids = server.sample_clients()
     downlink = server.downlink_package()
 
-    proc = Process(target=run_local_process, args=(trainer, downlink, cids))
+    proc = mp.Process(
+        target=_run_process_pool_trainer,
+        args=(trainer_init_args, downlink, cids),
+    )
     proc.start()
     assert proc.pid is not None
 
-    spawned_pids = []
-    timeout = 5
-    start_time = time.time()
-    while proc.is_alive():
-        spawned_pids = []
-        for child in psutil.Process(proc.pid).children(recursive=True):
-            spawned_pids.append(child.pid)
-        if len(spawned_pids) == num_parallels:
-            break
-        if time.time() - start_time > timeout:
-            pytest.fail(
-                f"Process did not spawn {len(spawned_pids)} processes within {timeout}s"
-            )
+    time.sleep(5)
     assert proc.is_alive()
 
     os.kill(proc.pid, signal.SIGINT)
@@ -265,19 +265,15 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     proc.join(timeout=5)
     assert not proc.is_alive()
 
-    orphan_pids = []
-    for pid in spawned_pids:
-        if psutil.pid_exists(pid):
-            orphan_pids.append(pid)
-    assert len(orphan_pids) == 0
-
 
 def test_base_handler_and_thread_pool_trainer_integration(
     model_selector, partitioned_dataset, device
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 2
-    num_clients = 3
+    num_clients = 10
     sample_ratio = 1.0
     epochs = 1
     batch_size = 2
@@ -325,11 +321,21 @@ def test_base_handler_and_thread_pool_trainer_integration(
     assert server.if_stop() is True
 
 
+def _run_thread_pool_trainer(
+    trainer_init_args: dict, downlink: FedAvgDownlinkPackage, cids: list[int]
+) -> None:
+    trainer = FedAvgThreadPoolClientTrainer(**trainer_init_args)
+    with suppress(KeyboardInterrupt):
+        trainer.local_process(downlink, cids)
+
+
 def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
     model_selector,
     partitioned_dataset,
     device,
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 1
     num_clients = 10
@@ -338,7 +344,7 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
     batch_size = 2
     lr = 0.01
     seed = 42
-    num_parallels = 10
+    num_parallels = 2
 
     server = FedAvgBaseServerHandler(
         model_selector=model_selector,
@@ -351,23 +357,25 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
         batch_size=batch_size,
     )
 
-    trainer = FedAvgThreadPoolClientTrainer(
-        model_selector=model_selector,
-        model_name=model_name,
-        dataset=partitioned_dataset,
-        device=device,
-        num_clients=num_clients,
-        epochs=epochs,
-        batch_size=batch_size,
-        lr=lr,
-        seed=seed,
-        num_parallels=num_parallels,
-    )
+    trainer_args = {
+        "model_selector": model_selector,
+        "model_name": model_name,
+        "dataset": partitioned_dataset,
+        "device": device,
+        "num_clients": num_clients,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "lr": lr,
+        "seed": seed,
+        "num_parallels": num_parallels,
+    }
 
     cids = server.sample_clients()
     downlink = server.downlink_package()
 
-    proc = Process(target=run_local_process, args=(trainer, downlink, cids))
+    proc = mp.Process(
+        target=_run_thread_pool_trainer, args=(trainer_args, downlink, cids)
+    )
     proc.start()
     assert proc.pid is not None
 

@@ -1,9 +1,11 @@
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import pytest
 import torch
+import torch.multiprocessing as mp
 
 from src.blazefl.core import ProcessPoolClientTrainer
 
@@ -42,6 +44,8 @@ class DummyProcessPoolClientTrainer(
             self.device_count = torch.cuda.device_count()
         self.cache: list[UplinkPackage] = []
         self.ipc_mode = ipc_mode
+        self.manager = mp.Manager()
+        self.stop_event = self.manager.Event()
 
     def uplink_package(self) -> list[UplinkPackage]:
         return self.cache
@@ -51,12 +55,16 @@ class DummyProcessPoolClientTrainer(
 
     @staticmethod
     def worker(
-        config: ClientConfig | Path, payload: DownlinkPackage | Path, device: str
+        config: ClientConfig | Path,
+        payload: DownlinkPackage | Path,
+        device: str,
+        stop_event: threading.Event,
     ) -> UplinkPackage | Path:
         def _storage_worker(
             config_path: Path,
             payload_path: Path,
             device: str,
+            stop_event: threading.Event,
         ) -> Path:
             config = torch.load(config_path, weights_only=False)
             assert isinstance(config, ClientConfig)
@@ -65,6 +73,7 @@ class DummyProcessPoolClientTrainer(
                 config=config,
                 payload=payload,
                 device=device,
+                stop_event=stop_event,
             )
             torch.save(dummy_uplink_package, config_path)
             return config_path
@@ -73,7 +82,9 @@ class DummyProcessPoolClientTrainer(
             config: ClientConfig,
             payload: DownlinkPackage,
             device: str,
+            stop_event: threading.Event,
         ) -> UplinkPackage:
+            _ = stop_event
             _ = device
             dummy_uplink_package = UplinkPackage(
                 cid=config.cid, message=payload.message + "<client_to_server>"
@@ -81,9 +92,9 @@ class DummyProcessPoolClientTrainer(
             return dummy_uplink_package
 
         if isinstance(config, Path) and isinstance(payload, Path):
-            return _storage_worker(config, payload, device)
+            return _storage_worker(config, payload, device, stop_event)
         elif isinstance(config, ClientConfig) and isinstance(payload, DownlinkPackage):
-            return _shared_memory_worker(config, payload, device)
+            return _shared_memory_worker(config, payload, device, stop_event)
         else:
             raise TypeError(
                 "Invalid types for config and payload."
