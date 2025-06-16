@@ -642,7 +642,6 @@ class FedAvgProcessPoolClientTrainer(
         device: str,
         epochs: int,
         lr: float,
-        stop_event: threading.Event | None = None,
     ) -> FedAvgUplinkPackage:
         """
         Train the model with the given training data loader.
@@ -667,8 +666,6 @@ class FedAvgProcessPoolClientTrainer(
 
         data_size = 0
         for _ in range(epochs):
-            if stop_event is not None and stop_event.is_set():
-                break
             for data, target in train_loader:
                 data = data.to(device)
                 target = target.to(device)
@@ -754,13 +751,14 @@ class FedAvgThreadPoolClientTrainer(
         self.lr = lr
         self.num_clients = num_clients
         self.seed = seed
-        self.stop_event = None
+        self.stop_event = threading.Event()
 
     def worker(
         self,
         cid: int,
         device: str,
         payload: FedAvgDownlinkPackage,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage:
         model = self.model_selector.select_model(self.model_name)
         train_loader = self.dataset.get_dataloader(
@@ -768,16 +766,68 @@ class FedAvgThreadPoolClientTrainer(
             cid=cid,
             batch_size=self.batch_size,
         )
-        package = FedAvgProcessPoolClientTrainer.train(
+        package = self.train(
             model=model,
             model_parameters=payload.model_parameters,
             train_loader=train_loader,
             device=device,
             epochs=self.epochs,
             lr=self.lr,
-            stop_event=self.stop_event,
+            stop_event=stop_event,
         )
         return package
+
+    def train(
+        self,
+        model: torch.nn.Module,
+        model_parameters: torch.Tensor,
+        train_loader: DataLoader,
+        device: str,
+        epochs: int,
+        lr: float,
+        stop_event: threading.Event,
+    ) -> FedAvgUplinkPackage:
+        """
+        Train the model with the given training data loader.
+
+        Args:
+            model (torch.nn.Module): The model to train.
+            model_parameters (torch.Tensor): Initial global model parameters.
+            train_loader (DataLoader): DataLoader for the training data.
+            device (str): Device to run the training on.
+            epochs (int): Number of local training epochs.
+            lr (float): Learning rate for the optimizer.
+
+        Returns:
+            FedAvgUplinkPackage: Uplink package containing updated model parameters
+            and data size.
+        """
+        model.to(device)
+        deserialize_model(model, model_parameters)
+        model.train()
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        data_size = 0
+        for _ in range(epochs):
+            if stop_event.is_set():
+                break
+            for data, target in train_loader:
+                data = data.to(device)
+                target = target.to(device)
+
+                output = model(data)
+                loss = criterion(output, target)
+
+                data_size += len(target)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        model_parameters = serialize_model(model)
+
+        return FedAvgUplinkPackage(model_parameters, data_size)
 
     def uplink_package(self) -> list[FedAvgUplinkPackage]:
         package = deepcopy(self.cache)

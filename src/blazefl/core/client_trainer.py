@@ -158,11 +158,12 @@ class ProcessPoolClientTrainer(
         else:  # shared_memory
             move_tensor_to_shared_memory(payload)
 
-        with mp.Pool(
+        pool = mp.Pool(
             processes=self.num_parallels,
             initializer=signal.signal,
             initargs=(signal.SIGINT, signal.SIG_IGN),
-        ) as pool:
+        )
+        try:
             jobs: list[ApplyResult] = []
             for cid in cid_list:
                 config = self.get_client_config(cid)
@@ -188,6 +189,9 @@ class ProcessPoolClientTrainer(
                 else:  # shared_memory
                     package = result
                 self.cache.append(package)
+        finally:
+            pool.close()
+            pool.join()
 
 
 class ThreadPoolClientTrainer(
@@ -198,13 +202,14 @@ class ThreadPoolClientTrainer(
     device: str
     device_count: int
     cache: list[UplinkPackage]
-    stop_event: threading.Event | None
+    stop_event: threading.Event
 
     def worker(
         self,
         cid: int,
         device: str,
         payload: DownlinkPackage,
+        stop_event: threading.Event,
     ) -> UplinkPackage:
         """
         Process a single client's training task in a thread.
@@ -213,6 +218,7 @@ class ThreadPoolClientTrainer(
             cid (int): The client ID.
             device (str): The device to use for processing this client.
             payload (DownlinkPackage): The data package received from the server.
+            stop_event (threading.Event): Event to signal stopping the worker.
 
         Returns:
             UplinkPackage: The uplink package containing the client's results.
@@ -225,31 +231,29 @@ class ThreadPoolClientTrainer(
         return self.device
 
     def local_process(self, payload: DownlinkPackage, cid_list: list[int]) -> None:
-        if self.stop_event is None:
-            self.stop_event = threading.Event()
         self.stop_event.clear()
+        executor = ThreadPoolExecutor(max_workers=self.num_parallels)
         try:
-            with ThreadPoolExecutor(max_workers=self.num_parallels) as executor:
-                futures = []
-                for cid in cid_list:
-                    device = self.get_client_device(cid)
-                    future = executor.submit(
-                        self.worker,
-                        cid,
-                        device,
-                        payload,
-                    )
-                    futures.append(future)
+            futures = []
+            for cid in cid_list:
+                device = self.get_client_device(cid)
+                future = executor.submit(
+                    self.worker,
+                    cid,
+                    device,
+                    payload,
+                    self.stop_event,
+                )
+                futures.append(future)
 
-                for future in tqdm(
-                    as_completed(futures),
-                    total=len(futures),
-                    desc="Client",
-                    leave=False,
-                ):
-                    result = future.result()
-                    self.cache.append(result)
-        except KeyboardInterrupt:
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Client",
+                leave=False,
+            ):
+                result = future.result()
+                self.cache.append(result)
+        finally:
             self.stop_event.set()
-            raise
-        return
+            executor.shutdown(wait=True, cancel_futures=True)
