@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import torch
+import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -547,12 +548,15 @@ class FedAvgProcessPoolClientTrainer(
         self.num_clients = num_clients
         self.seed = seed
         self.ipc_mode = ipc_mode
+        self.manager = mp.Manager()
+        self.stop_event = self.manager.Event()
 
     @staticmethod
     def worker(
         config: FedAvgClientConfig | Path,
         payload: FedAvgDownlinkPackage | Path,
         device: str,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage | Path:
         """
         Process a single client's local training and evaluation.
@@ -580,6 +584,7 @@ class FedAvgProcessPoolClientTrainer(
             config_path: Path,
             payload_path: Path,
             device: str,
+            stop_event: threading.Event,
         ) -> Path:
             config = torch.load(config_path, weights_only=False)
             assert isinstance(config, FedAvgClientConfig)
@@ -589,6 +594,7 @@ class FedAvgProcessPoolClientTrainer(
                 config=config,
                 payload=payload,
                 device=device,
+                stop_event=stop_event,
             )
             torch.save(package, config_path)
             return config_path
@@ -597,6 +603,7 @@ class FedAvgProcessPoolClientTrainer(
             config: FedAvgClientConfig,
             payload: FedAvgDownlinkPackage,
             device: str,
+            stop_event: threading.Event,
         ) -> FedAvgUplinkPackage:
             if config.state_path.exists():
                 state = torch.load(config.state_path, weights_only=False)
@@ -618,16 +625,17 @@ class FedAvgProcessPoolClientTrainer(
                 device=device,
                 epochs=config.epochs,
                 lr=config.lr,
+                stop_event=stop_event,
             )
             torch.save(RandomState.get_random_state(device=device), config.state_path)
             return package
 
         if isinstance(config, Path) and isinstance(payload, Path):
-            return _storage_worker(config, payload, device)
+            return _storage_worker(config, payload, device, stop_event)
         elif isinstance(config, FedAvgClientConfig) and isinstance(
             payload, FedAvgDownlinkPackage
         ):
-            return _shared_memory_worker(config, payload, device)
+            return _shared_memory_worker(config, payload, device, stop_event)
         else:
             raise TypeError(
                 "Invalid types for config and payload."
@@ -642,7 +650,7 @@ class FedAvgProcessPoolClientTrainer(
         device: str,
         epochs: int,
         lr: float,
-        stop_event: threading.Event | None = None,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage:
         """
         Train the model with the given training data loader.
@@ -667,7 +675,7 @@ class FedAvgProcessPoolClientTrainer(
 
         data_size = 0
         for _ in range(epochs):
-            if stop_event is not None and stop_event.is_set():
+            if stop_event.is_set():
                 break
             for data, target in train_loader:
                 data = data.to(device)
@@ -754,13 +762,14 @@ class FedAvgThreadPoolClientTrainer(
         self.lr = lr
         self.num_clients = num_clients
         self.seed = seed
-        self.stop_event = None
+        self.stop_event = threading.Event()
 
     def worker(
         self,
         cid: int,
         device: str,
         payload: FedAvgDownlinkPackage,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage:
         model = self.model_selector.select_model(self.model_name)
         train_loader = self.dataset.get_dataloader(
@@ -768,16 +777,68 @@ class FedAvgThreadPoolClientTrainer(
             cid=cid,
             batch_size=self.batch_size,
         )
-        package = FedAvgProcessPoolClientTrainer.train(
+        package = self.train(
             model=model,
             model_parameters=payload.model_parameters,
             train_loader=train_loader,
             device=device,
             epochs=self.epochs,
             lr=self.lr,
-            stop_event=self.stop_event,
+            stop_event=stop_event,
         )
         return package
+
+    def train(
+        self,
+        model: torch.nn.Module,
+        model_parameters: torch.Tensor,
+        train_loader: DataLoader,
+        device: str,
+        epochs: int,
+        lr: float,
+        stop_event: threading.Event,
+    ) -> FedAvgUplinkPackage:
+        """
+        Train the model with the given training data loader.
+
+        Args:
+            model (torch.nn.Module): The model to train.
+            model_parameters (torch.Tensor): Initial global model parameters.
+            train_loader (DataLoader): DataLoader for the training data.
+            device (str): Device to run the training on.
+            epochs (int): Number of local training epochs.
+            lr (float): Learning rate for the optimizer.
+
+        Returns:
+            FedAvgUplinkPackage: Uplink package containing updated model parameters
+            and data size.
+        """
+        model.to(device)
+        deserialize_model(model, model_parameters)
+        model.train()
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        data_size = 0
+        for _ in range(epochs):
+            if stop_event.is_set():
+                break
+            for data, target in train_loader:
+                data = data.to(device)
+                target = target.to(device)
+
+                output = model(data)
+                loss = criterion(output, target)
+
+                data_size += len(target)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        model_parameters = serialize_model(model)
+
+        return FedAvgUplinkPackage(model_parameters, data_size)
 
     def uplink_package(self) -> list[FedAvgUplinkPackage]:
         package = deepcopy(self.cache)

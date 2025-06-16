@@ -120,9 +120,7 @@ def main(
     try:
         pipeline.main()
     except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt: Stopping the pipeline.")
-    except Exception as e:
-        logging.exception(f"An error occurred: {e}")
+        logging.info("KeyboardInterrupt")
 
 
 if __name__ == "__main__":
