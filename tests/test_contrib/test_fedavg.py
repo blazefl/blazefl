@@ -2,11 +2,12 @@ import os
 import signal
 import time
 from contextlib import suppress
-from multiprocessing import Process
 
+# from multiprocessing import Process
 import psutil
 import pytest
 import torch
+import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, Dataset
 
 from src.blazefl.contrib.fedavg import (
@@ -138,7 +139,8 @@ def test_base_server_and_base_trainer_integration(
 
 
 def _run_process_pool_trainer(trainer, downlink, cids):
-    with suppress(Exception):
+    os.setsid()
+    with suppress(KeyboardInterrupt):
         trainer.local_process(downlink, cids)
 
 
@@ -146,6 +148,8 @@ def _run_process_pool_trainer(trainer, downlink, cids):
 def test_base_handler_and_process_pool_trainer_integration(
     model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir, ipc_mode
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 2
     num_clients = 10
@@ -202,6 +206,8 @@ def test_base_handler_and_process_pool_trainer_integration(
 def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 1
     num_clients = 10
@@ -242,7 +248,10 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     cids = server.sample_clients()
     downlink = server.downlink_package()
 
-    proc = Process(target=_run_process_pool_trainer, args=(trainer, downlink, cids))
+    proc = mp.Process(
+        target=_run_process_pool_trainer,
+        args=(trainer, downlink, cids),
+    )
     proc.start()
     assert proc.pid is not None
 
@@ -261,9 +270,10 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
             )
     assert proc.is_alive()
 
-    os.kill(proc.pid, signal.SIGINT)
+    pgid = os.getpgid(proc.pid)
+    os.killpg(pgid, signal.SIGINT)
 
-    proc.join(timeout=5)
+    proc.join(timeout=10)
     assert not proc.is_alive()
 
     orphan_pids = []
@@ -276,6 +286,8 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
 def test_base_handler_and_thread_pool_trainer_integration(
     model_selector, partitioned_dataset, device
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 2
     num_clients = 10
@@ -329,8 +341,9 @@ def test_base_handler_and_thread_pool_trainer_integration(
 def _run_thread_pool_trainer(
     trainer_init_args: dict, downlink: FedAvgDownlinkPackage, cids: list[int]
 ) -> None:
+    os.setsid()
     trainer = FedAvgThreadPoolClientTrainer(**trainer_init_args)
-    with suppress(Exception):
+    with suppress(KeyboardInterrupt):
         trainer.local_process(downlink, cids)
 
 
@@ -339,6 +352,8 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
     partitioned_dataset,
     device,
 ):
+    mp.set_start_method("spawn", force=True)
+
     model_name = "dummy"
     global_round = 1
     num_clients = 10
@@ -376,7 +391,9 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
     cids = server.sample_clients()
     downlink = server.downlink_package()
 
-    proc = Process(target=_run_thread_pool_trainer, args=(trainer_args, downlink, cids))
+    proc = mp.Process(
+        target=_run_thread_pool_trainer, args=(trainer_args, downlink, cids)
+    )
     proc.start()
     assert proc.pid is not None
 
@@ -390,7 +407,8 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
         time.sleep(0.1)
     assert proc.is_alive()
 
-    os.kill(proc.pid, signal.SIGINT)
+    pgid = os.getpgid(proc.pid)
+    os.killpg(pgid, signal.SIGINT)
 
     proc.join(timeout=5)
     assert not proc.is_alive()

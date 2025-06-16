@@ -1,5 +1,3 @@
-import multiprocessing as mp
-import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing.pool import ApplyResult
@@ -7,6 +5,7 @@ from pathlib import Path
 from typing import Literal, Protocol, TypeVar
 
 import torch
+import torch.multiprocessing as mp
 from tqdm import tqdm
 
 from blazefl.utils import move_tensor_to_shared_memory
@@ -158,11 +157,7 @@ class ProcessPoolClientTrainer(
         else:  # shared_memory
             move_tensor_to_shared_memory(payload)
 
-        pool = mp.Pool(
-            processes=self.num_parallels,
-            initializer=signal.signal,
-            initargs=(signal.SIGINT, signal.SIG_IGN),
-        )
+        pool = mp.Pool(processes=self.num_parallels)
         try:
             jobs: list[ApplyResult] = []
             for cid in cid_list:
