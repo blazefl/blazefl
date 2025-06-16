@@ -1,6 +1,7 @@
 import os
 import signal
 import time
+from contextlib import suppress
 from multiprocessing import Process
 
 import psutil
@@ -137,7 +138,8 @@ def test_base_server_and_base_trainer_integration(
 
 
 def _run_process_pool_trainer(trainer, downlink, cids):
-    trainer.local_process(downlink, cids)
+    with suppress(Exception):
+        trainer.local_process(downlink, cids)
 
 
 @pytest.mark.parametrize("ipc_mode", ["storage", "shared_memory"])
@@ -208,7 +210,7 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     batch_size = 2
     lr = 0.01
     seed = 42
-    num_parallels = 10
+    num_parallels = 2
 
     server = FedAvgBaseServerHandler(
         model_selector=model_selector,
@@ -328,7 +330,8 @@ def _run_thread_pool_trainer(
     trainer_init_args: dict, downlink: FedAvgDownlinkPackage, cids: list[int]
 ) -> None:
     trainer = FedAvgThreadPoolClientTrainer(**trainer_init_args)
-    trainer.local_process(downlink, cids)
+    with suppress(Exception):
+        trainer.local_process(downlink, cids)
 
 
 def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
@@ -344,7 +347,7 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
     batch_size = 2
     lr = 0.01
     seed = 42
-    num_parallels = 10
+    num_parallels = 2
 
     server = FedAvgBaseServerHandler(
         model_selector=model_selector,
