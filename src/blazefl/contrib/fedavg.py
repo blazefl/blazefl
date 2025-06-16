@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import torch
+import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -547,12 +548,15 @@ class FedAvgProcessPoolClientTrainer(
         self.num_clients = num_clients
         self.seed = seed
         self.ipc_mode = ipc_mode
+        self.manager = mp.Manager()
+        self.stop_event = self.manager.Event()
 
     @staticmethod
     def worker(
         config: FedAvgClientConfig | Path,
         payload: FedAvgDownlinkPackage | Path,
         device: str,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage | Path:
         """
         Process a single client's local training and evaluation.
@@ -580,6 +584,7 @@ class FedAvgProcessPoolClientTrainer(
             config_path: Path,
             payload_path: Path,
             device: str,
+            stop_event: threading.Event,
         ) -> Path:
             config = torch.load(config_path, weights_only=False)
             assert isinstance(config, FedAvgClientConfig)
@@ -589,6 +594,7 @@ class FedAvgProcessPoolClientTrainer(
                 config=config,
                 payload=payload,
                 device=device,
+                stop_event=stop_event,
             )
             torch.save(package, config_path)
             return config_path
@@ -597,6 +603,7 @@ class FedAvgProcessPoolClientTrainer(
             config: FedAvgClientConfig,
             payload: FedAvgDownlinkPackage,
             device: str,
+            stop_event: threading.Event,
         ) -> FedAvgUplinkPackage:
             if config.state_path.exists():
                 state = torch.load(config.state_path, weights_only=False)
@@ -618,16 +625,17 @@ class FedAvgProcessPoolClientTrainer(
                 device=device,
                 epochs=config.epochs,
                 lr=config.lr,
+                stop_event=stop_event,
             )
             torch.save(RandomState.get_random_state(device=device), config.state_path)
             return package
 
         if isinstance(config, Path) and isinstance(payload, Path):
-            return _storage_worker(config, payload, device)
+            return _storage_worker(config, payload, device, stop_event)
         elif isinstance(config, FedAvgClientConfig) and isinstance(
             payload, FedAvgDownlinkPackage
         ):
-            return _shared_memory_worker(config, payload, device)
+            return _shared_memory_worker(config, payload, device, stop_event)
         else:
             raise TypeError(
                 "Invalid types for config and payload."
@@ -642,6 +650,7 @@ class FedAvgProcessPoolClientTrainer(
         device: str,
         epochs: int,
         lr: float,
+        stop_event: threading.Event,
     ) -> FedAvgUplinkPackage:
         """
         Train the model with the given training data loader.
@@ -666,6 +675,8 @@ class FedAvgProcessPoolClientTrainer(
 
         data_size = 0
         for _ in range(epochs):
+            if stop_event.is_set():
+                break
             for data, target in train_loader:
                 data = data.to(device)
                 target = target.to(device)

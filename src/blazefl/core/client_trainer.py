@@ -1,3 +1,4 @@
+import signal
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing.pool import ApplyResult
@@ -82,6 +83,7 @@ class ProcessPoolClientTrainer(
     device_count: int
     cache: list[UplinkPackage]
     ipc_mode: Literal["storage", "shared_memory"] = "storage"
+    stop_event: threading.Event
 
     def get_client_config(self, cid: int) -> ClientConfig:
         """
@@ -111,7 +113,10 @@ class ProcessPoolClientTrainer(
 
     @staticmethod
     def worker(
-        config: ClientConfig | Path, payload: DownlinkPackage | Path, device: str
+        config: ClientConfig | Path,
+        payload: DownlinkPackage | Path,
+        device: str,
+        stop_event: threading.Event,
     ) -> UplinkPackage | Path:
         """
         Process a single client's training task.
@@ -157,7 +162,12 @@ class ProcessPoolClientTrainer(
         else:  # shared_memory
             move_tensor_to_shared_memory(payload)
 
-        pool = mp.Pool(processes=self.num_parallels)
+        self.stop_event.clear()
+        pool = mp.Pool(
+            processes=self.num_parallels,
+            initializer=signal.signal,
+            initargs=(signal.SIGINT, signal.SIG_IGN),
+        )
         try:
             jobs: list[ApplyResult] = []
             for cid in cid_list:
@@ -168,12 +178,15 @@ class ProcessPoolClientTrainer(
                     torch.save(config, config_path)
                     jobs.append(
                         pool.apply_async(
-                            self.worker, (config_path, payload_path, device)
+                            self.worker,
+                            (config_path, payload_path, device, self.stop_event),
                         )
                     )
                 else:  # shared_memory
                     jobs.append(
-                        pool.apply_async(self.worker, (config, payload, device))
+                        pool.apply_async(
+                            self.worker, (config, payload, device, self.stop_event)
+                        )
                     )
 
             for job in tqdm(jobs, desc="Client", leave=False):
@@ -185,6 +198,7 @@ class ProcessPoolClientTrainer(
                     package = result
                 self.cache.append(package)
         finally:
+            self.stop_event.set()
             pool.close()
             pool.join()
 
