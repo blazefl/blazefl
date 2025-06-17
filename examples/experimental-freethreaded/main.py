@@ -100,7 +100,7 @@ def main(cfg: DictConfig):
         | None
     ) = None
     match cfg.execution_mode:
-        case "serial":
+        case "single-thread":
             trainer = FedAvgBaseClientTrainer(
                 model_selector=model_selector,
                 model_name=cfg.model_name,
@@ -146,9 +146,7 @@ def main(cfg: DictConfig):
     try:
         pipeline.main()
     except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt: Stopping the pipeline.")
-    except Exception as e:
-        logging.exception(f"An error occurred: {e}")
+        logging.info("KeyboardInterrupt")
 
 
 if __name__ == "__main__":
