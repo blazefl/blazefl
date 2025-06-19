@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 import torchvision
+from blazefl.contrib import FedAvgPartitionType
 from blazefl.core import PartitionedDataset
 from blazefl.utils import FilteredDataset
 from torch.utils.data import DataLoader, Dataset
@@ -15,7 +16,7 @@ from dataset.functional import (
 )
 
 
-class PartitionedCIFAR10(PartitionedDataset):
+class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
     def __init__(
         self,
         root: Path,
