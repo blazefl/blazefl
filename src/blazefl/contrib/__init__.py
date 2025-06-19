@@ -9,11 +9,11 @@ from blazefl.contrib.fedavg import (
     FedAvgBaseClientTrainer,
     FedAvgBaseServerHandler,
     FedAvgDownlinkPackage,
+    FedAvgPartitionedDataset,
+    FedAvgPartitionType,
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
     FedAvgUplinkPackage,
-    FedAvgPartitionType,
-    FedAvgPartitionedDataset,
 )
 
 __all__ = [
