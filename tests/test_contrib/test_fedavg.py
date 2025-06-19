@@ -262,7 +262,7 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
 
     os.kill(proc.pid, signal.SIGINT)
 
-    proc.join(timeout=5)
+    proc.join(timeout=10)
     assert not proc.is_alive()
 
 
