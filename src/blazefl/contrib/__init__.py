@@ -12,6 +12,8 @@ from blazefl.contrib.fedavg import (
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
     FedAvgUplinkPackage,
+    FedAvgPartitionType,
+    FedAvgPartitionedDataset,
 )
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "FedAvgThreadPoolClientTrainer",
     "FedAvgUplinkPackage",
     "FedAvgDownlinkPackage",
+    "FedAvgPartitionType",
+    "FedAvgPartitionedDataset",
 ]
