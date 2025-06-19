@@ -1,9 +1,12 @@
-from typing import Protocol
+from enum import StrEnum
+from typing import Protocol, TypeVar
 
 from torch.utils.data import DataLoader, Dataset
 
+PartitionType = TypeVar("PartitionType", bound=StrEnum, contravariant=True)
 
-class PartitionedDataset(Protocol):
+
+class PartitionedDataset(Protocol[PartitionType]):
     """
     Abstract base class for partitioned datasets in federated learning.
 
@@ -14,7 +17,7 @@ class PartitionedDataset(Protocol):
         NotImplementedError: If the methods are not implemented in a subclass.
     """
 
-    def get_dataset(self, type_: str, cid: int | None) -> Dataset:
+    def get_dataset(self, type_: PartitionType, cid: int | None) -> Dataset:
         """
         Retrieve a dataset for a specific type and client ID.
 
@@ -28,7 +31,7 @@ class PartitionedDataset(Protocol):
         ...
 
     def get_dataloader(
-        self, type_: str, cid: int | None, batch_size: int | None
+        self, type_: PartitionType, cid: int | None, batch_size: int | None
     ) -> DataLoader:
         """
         Retrieve a DataLoader for a specific type, client ID, and batch size.
