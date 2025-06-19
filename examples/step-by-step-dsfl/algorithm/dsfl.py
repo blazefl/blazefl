@@ -1,10 +1,12 @@
 import random
+import threading
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+import torch.multiprocessing as mp
 import torch.nn.functional as F
 from blazefl.core import (
     BaseServerHandler,
@@ -17,7 +19,7 @@ from blazefl.utils import (
 )
 from torch.utils.data import DataLoader, Subset
 
-from dataset import DSFLPartitionedDataset
+from dataset import DSFLPartitionedDataset, DSFLPartitionType
 from models import DSFLModelSelector
 
 
@@ -125,6 +127,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
             self.kd_epochs,
             self.kd_batch_size,
             self.device,
+            stop_event=None,
         )
 
         self.global_soft_labels = torch.stack(global_soft_labels)
@@ -140,10 +143,11 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         kd_epochs: int,
         kd_batch_size: int,
         device: str,
+        stop_event: threading.Event | None,
     ) -> None:
         model.to(device)
         model.train()
-        open_dataset = dataset.get_dataset(type_="open", cid=None)
+        open_dataset = dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
         open_loader = DataLoader(
             Subset(open_dataset, global_indices),
             batch_size=kd_batch_size,
@@ -156,6 +160,8 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
             batch_size=kd_batch_size,
         )
         for _ in range(kd_epochs):
+            if stop_event is not None and stop_event.is_set():
+                break
             for data, soft_label in zip(
                 open_loader, global_soft_label_loader, strict=True
             ):
@@ -208,7 +214,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         server_loss, server_acc = DSFLBaseServerHandler.evaulate(
             self.model,
             self.dataset.get_dataloader(
-                type_="test",
+                type_=DSFLPartitionType.TEST,
                 cid=None,
                 batch_size=self.kd_batch_size,
             ),
@@ -300,6 +306,8 @@ class DSFLProcessPoolClientTrainer(
         self.num_clients = num_clients
         self.seed = seed
         self.ipc_mode = "storage"
+        self.manager = mp.Manager()
+        self.stop_event = self.manager.Event()
 
         if self.device == "cuda":
             self.device_count = torch.cuda.device_count()
@@ -309,6 +317,7 @@ class DSFLProcessPoolClientTrainer(
         config: DSFLClientConfig | Path,
         payload: DSFLDownlinkPackage | Path,
         device: str,
+        stop_event: threading.Event,
     ) -> Path:
         assert isinstance(config, Path) and isinstance(payload, Path)
         config_path, payload_path = config, payload
@@ -334,7 +343,7 @@ class DSFLProcessPoolClientTrainer(
             seed_everything(c.seed, device=device)
 
         # Distill
-        open_dataset = c.dataset.get_dataset(type_="open", cid=None)
+        open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
         if p.indices is not None and p.soft_labels is not None:
             global_soft_labels = list(torch.unbind(p.soft_labels, dim=0))
             global_indices = p.indices.tolist()
@@ -349,11 +358,12 @@ class DSFLProcessPoolClientTrainer(
                 kd_epochs=c.kd_epochs,
                 kd_batch_size=c.kd_batch_size,
                 device=device,
+                stop_event=stop_event,
             )
 
         # Train
         train_loader = c.dataset.get_dataloader(
-            type_="train",
+            type_=DSFLPartitionType.TRAIN,
             cid=c.cid,
             batch_size=c.batch_size,
         )
@@ -363,6 +373,7 @@ class DSFLProcessPoolClientTrainer(
             train_loader=train_loader,
             device=device,
             epochs=c.epochs,
+            stop_event=stop_event,
         )
 
         # Predict
@@ -378,7 +389,7 @@ class DSFLProcessPoolClientTrainer(
 
         # Evaluate
         test_loader = c.dataset.get_dataloader(
-            type_="test",
+            type_=DSFLPartitionType.TEST,
             cid=c.cid,
             batch_size=c.batch_size,
         )
@@ -411,12 +422,15 @@ class DSFLProcessPoolClientTrainer(
         train_loader: DataLoader,
         device: str,
         epochs: int,
+        stop_event: threading.Event,
     ) -> None:
         model.to(device)
         model.train()
         criterion = torch.nn.CrossEntropyLoss()
 
         for _ in range(epochs):
+            if stop_event.is_set():
+                break
             for data, target in train_loader:
                 data = data.to(device)
                 target = target.to(device)
@@ -431,7 +445,9 @@ class DSFLProcessPoolClientTrainer(
 
     @staticmethod
     def predict(
-        model: torch.nn.Module, open_loader: DataLoader, device: str
+        model: torch.nn.Module,
+        open_loader: DataLoader,
+        device: str,
     ) -> torch.Tensor:
         model.to(device)
         model.eval()

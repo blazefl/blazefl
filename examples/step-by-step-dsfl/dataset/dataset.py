@@ -1,4 +1,5 @@
 from collections.abc import Sized
+from enum import StrEnum
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,13 @@ from dataset.functional import (
 )
 
 
-class DSFLPartitionedDataset(PartitionedDataset):
+class DSFLPartitionType(StrEnum):
+    TRAIN = "train"
+    OPEN = "open"
+    TEST = "test"
+
+
+class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
     def __init__(
         self,
         root: Path,
@@ -68,7 +75,7 @@ class DSFLPartitionedDataset(PartitionedDataset):
             train=False,
             download=True,
         )
-        for type_ in ["train", "open", "test"]:
+        for type_ in [ds.value for ds in DSFLPartitionType]:
             self.path.joinpath(type_).mkdir(parents=True)
 
         match self.partition:
@@ -141,19 +148,19 @@ class DSFLPartitionedDataset(PartitionedDataset):
             self.path.joinpath("test", "default.pkl"),
         )
 
-    def get_dataset(self, type_: str, cid: int | None) -> Dataset:
+    def get_dataset(self, type_: DSFLPartitionType, cid: int | None) -> Dataset:
         match type_:
-            case "train":
+            case DSFLPartitionType.TRAIN:
                 dataset = torch.load(
                     self.path.joinpath(type_, f"{cid}.pkl"),
                     weights_only=False,
                 )
-            case "open":
+            case DSFLPartitionType.OPEN:
                 dataset = torch.load(
                     self.path.joinpath(f"{type_}.pkl"),
                     weights_only=False,
                 )
-            case "test":
+            case DSFLPartitionType.TEST:
                 if cid is not None:
                     dataset = torch.load(
                         self.path.joinpath(type_, f"{cid}.pkl"),
@@ -163,13 +170,11 @@ class DSFLPartitionedDataset(PartitionedDataset):
                     dataset = torch.load(
                         self.path.joinpath(type_, "default.pkl"), weights_only=False
                     )
-            case _:
-                raise ValueError(f"Invalid dataset type: {type_}")
         assert isinstance(dataset, Dataset)
         return dataset
 
     def get_dataloader(
-        self, type_: str, cid: int | None, batch_size: int | None = None
+        self, type_: DSFLPartitionType, cid: int | None, batch_size: int | None = None
     ) -> DataLoader:
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
