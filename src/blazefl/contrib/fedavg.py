@@ -2,6 +2,7 @@ import random
 import threading
 from copy import deepcopy
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -57,8 +58,16 @@ class FedAvgDownlinkPackage:
     model_parameters: torch.Tensor
 
 
+class FedAvgPartitionType(StrEnum):
+    TRAIN = "train"
+    TEST = "test"
+
+
+FedAvgPartitionedDataset = PartitionedDataset[FedAvgPartitionType]
+
+
 class FedAvgBaseServerHandler(
-    BaseServerHandler[FedAvgUplinkPackage, FedAvgDownlinkPackage]
+    BaseServerHandler[FedAvgUplinkPackage, FedAvgDownlinkPackage],
 ):
     """
     Server-side handler for the Federated Averaging (FedAvg) algorithm.
@@ -83,7 +92,7 @@ class FedAvgBaseServerHandler(
         self,
         model_selector: ModelSelector,
         model_name: str,
-        dataset: PartitionedDataset,
+        dataset: FedAvgPartitionedDataset,
         global_round: int,
         num_clients: int,
         sample_ratio: float,
@@ -241,7 +250,7 @@ class FedAvgBaseServerHandler(
         server_loss, server_acc = FedAvgBaseServerHandler.evaluate(
             self.model,
             self.dataset.get_dataloader(
-                type_="test",
+                type_=FedAvgPartitionType.TEST,
                 cid=None,
                 batch_size=self.batch_size,
             ),
@@ -289,7 +298,7 @@ class FedAvgBaseClientTrainer(
         self,
         model_selector: ModelSelector,
         model_name: str,
-        dataset: PartitionedDataset,
+        dataset: FedAvgPartitionedDataset,
         device: str,
         num_clients: int,
         epochs: int,
@@ -339,14 +348,9 @@ class FedAvgBaseClientTrainer(
         model_parameters = payload.model_parameters
         for cid in tqdm(cid_list, desc="Client", leave=False):
             data_loader = self.dataset.get_dataloader(
-                type_="train", cid=cid, batch_size=self.batch_size
+                type_=FedAvgPartitionType.TRAIN, cid=cid, batch_size=self.batch_size
             )
             pack = self.train(model_parameters, data_loader)
-            val_loader = self.dataset.get_dataloader(
-                type_="val", cid=cid, batch_size=self.batch_size
-            )
-            loss, acc = self.evaluate(val_loader)
-            pack.metadata = {"loss": loss, "acc": acc}
             self.cache.append(pack)
 
     def train(
@@ -457,7 +461,7 @@ class FedAvgClientConfig:
 
     model_selector: ModelSelector
     model_name: str
-    dataset: PartitionedDataset
+    dataset: FedAvgPartitionedDataset
     epochs: int
     batch_size: int
     lr: float
@@ -501,7 +505,7 @@ class FedAvgProcessPoolClientTrainer(
         model_name: str,
         share_dir: Path,
         state_dir: Path,
-        dataset: PartitionedDataset,
+        dataset: FedAvgPartitionedDataset,
         device: str,
         num_clients: int,
         epochs: int,
@@ -614,7 +618,7 @@ class FedAvgProcessPoolClientTrainer(
 
             model = config.model_selector.select_model(config.model_name)
             train_loader = config.dataset.get_dataloader(
-                type_="train",
+                type_=FedAvgPartitionType.TRAIN,
                 cid=config.cid,
                 batch_size=config.batch_size,
             )
@@ -739,7 +743,7 @@ class FedAvgThreadPoolClientTrainer(
         self,
         model_selector: ModelSelector,
         model_name: str,
-        dataset: PartitionedDataset,
+        dataset: FedAvgPartitionedDataset,
         device: str,
         num_clients: int,
         epochs: int,
@@ -773,7 +777,7 @@ class FedAvgThreadPoolClientTrainer(
     ) -> FedAvgUplinkPackage:
         model = self.model_selector.select_model(self.model_name)
         train_loader = self.dataset.get_dataloader(
-            type_="train",
+            type_=FedAvgPartitionType.TRAIN,
             cid=cid,
             batch_size=self.batch_size,
         )
