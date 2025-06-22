@@ -1,6 +1,5 @@
 import random
 import threading
-from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -431,7 +430,7 @@ class FedAvgBaseClientTrainer(
         Returns:
             list[FedAvgUplinkPackage]: A list of uplink packages.
         """
-        package = deepcopy(self.cache)
+        package = self.cache
         self.cache = []
         return package
 
@@ -726,7 +725,7 @@ class FedAvgProcessPoolClientTrainer(
         Returns:
             list[FedAvgUplinkPackage]: A list of uplink packages.
         """
-        package = deepcopy(self.cache)
+        package = self.cache
         self.cache = []
         return package
 
@@ -843,6 +842,6 @@ class FedAvgThreadPoolClientTrainer(
         return FedAvgUplinkPackage(model_parameters, data_size)
 
     def uplink_package(self) -> list[FedAvgUplinkPackage]:
-        package = deepcopy(self.cache)
+        package = self.cache
         self.cache = []
         return package
