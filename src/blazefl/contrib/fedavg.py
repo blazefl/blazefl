@@ -196,7 +196,7 @@ class FedAvgBaseServerHandler(
         """
         total_weight = sum(weights_list)
         aggregated_parameters = parameters_list[0].clone().zero_()
-        for parameters, weight in zip(parameters_list, weights_list, strict=False):
+        for parameters, weight in zip(parameters_list, weights_list, strict=True):
             aggregated_parameters.add_(parameters, alpha=weight / total_weight)
         return aggregated_parameters
 
