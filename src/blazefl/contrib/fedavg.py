@@ -195,13 +195,11 @@ class FedAvgBaseServerHandler(
         Returns:
             torch.Tensor: Aggregated model parameters.
         """
-        parameters = torch.stack(parameters_list, dim=-1)
-        weights = torch.tensor(weights_list)
-        weights = weights / torch.sum(weights)
-
-        serialized_parameters = torch.sum(parameters * weights, dim=-1)
-
-        return serialized_parameters
+        total_weight = sum(weights_list)
+        aggregated_parameters = parameters_list[0].clone().zero_()
+        for parameters, weight in zip(parameters_list, weights_list, strict=False):
+            aggregated_parameters.add_(parameters, alpha=weight / total_weight)
+        return aggregated_parameters
 
     @staticmethod
     def evaluate(
