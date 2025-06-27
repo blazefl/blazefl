@@ -181,10 +181,11 @@ The benchmark was conducted in the following Podman container environment:
 
 ### Results
 
-<div style="display: flex; justify-content: center; align-items: center; padding-bottom: 20px;">
-  <img src="docs/imgs/benchmark_cnn.svg" alt="CNN" width="50%" />
-  <img src="docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="50%" />
+<div style="display: flex; justify-content: center; align-items: center;">
+  <img src="docs/imgs/benchmark_cnn.svg" alt="CNN" width="48%" />
+  <img src="docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="48%" />
 </div>
+<br>
 
 The benchmark results indicate that BlazeFL has competitive performance against Flower. This is noteworthy as BlazeFL achieves this with a significantly smaller codebase relying only on standard Python libraries and PyTorch, whereas Flower is a powerful framework built on top of Ray. In particular, the experimental multi-threaded mode shows the potential for even higher performance due to its lightweight threads.
 
