@@ -40,11 +40,11 @@ graph LR
       STJ@{ shape: f-circ, label: "Junction" } --> ST1[Client 1]
       ST1 --> ST2[Client 2]
       ST2 --> ST3[Client 3]
-      ST3 -...-> STN-2[Client N-2]
-      STN-2 -..-> STN-1[Client N-1]
-      STN-1 --> STN[Client N]
+      ST3 -...-> STK-2[Client K-2]
+      STK-2 -..-> STK-1[Client K-1]
+      STK-1 --> STK[Client K]
     end
-    STN --> STJ
+    STK --> STJ
     STJ --> STS
     STS --> STJ
 ```
@@ -69,27 +69,27 @@ graph LR
       STJ1@{ shape: f-circ, label: "Junction" }
       subgraph "Thread 1"
         ST1[Client 1] --> ST4[Client 4]
-        ST4 -.-> STN-2[Client N-2]
+        ST4 -.-> STK-2[Client K-2]
       end
       subgraph "Thread 2"
         ST2[Client 2] --> ST5[Client 5]
-        ST5 -.-> STN-1[Client N-1]
+        ST5 -.-> STK-1[Client K-1]
       end
       subgraph "Thread 3"
         ST3[Client 3] --> ST6[Client 6]
-        ST6 -.-> STN[Client N]
+        ST6 -.-> STK[Client K]
       end
       STJ1 --> ST1
       STJ1 --> ST2
       STJ1 --> ST3
-      STN-2 --> STJ2@{ shape: f-circ, label: "Junction" }
-      STN-1 --> STJ2
-      STN --> STJ2
+      STK-2 --> STJ2@{ shape: f-circ, label: "Junction" }
+      STK-1 --> STJ2
+      STK --> STJ2
       STJ2 --> STJ1
       STJ1 --Write/Read--> MEM
       ST1 --Read/Write--> MEM
       ST5 --Read/Write--> MEM
-      STN --Read/Write--> MEM
+      STK --Read/Write--> MEM
     end
     STJ1 --> STS
     STS --> STJ1
@@ -114,27 +114,27 @@ graph LR
       SPJ1@{ shape: f-circ, label: "Junction" }
       subgraph "Process 1"
         SP1[Client 1] --> SP4[Client 4]
-        SP4 -.-> SPN-2[Client N-2]
+        SP4 -.-> SPK-2[Client K-2]
       end
       subgraph "Process 2"
         SP2[Client 2] --> SP5[Client 5]
-        SP5 -.-> SPN-1[Client N-1]
+        SP5 -.-> SPK-1[Client K-1]
       end
       subgraph "Process 3"
         SP3[Client 3] --> SP6[Client 6]
-        SP6 -.-> SPN[Client N]
+        SP6 -.-> SPK[Client K]
       end
       SPJ1 --> SP1
       SPJ1 --> SP2
       SPJ1 --> SP3
-      SPN-2 --> SPJ2@{ shape: f-circ, label: "Junction" }
-      SPN-1 --> SPJ2
-      SPN --> SPJ2
+      SPK-2 --> SPJ2@{ shape: f-circ, label: "Junction" }
+      SPK-1 --> SPJ2
+      SPK --> SPJ2
       SPJ2 --> SPJ1
       SPJ1 --Write/Read--> SHM
       SP1 --Read/Write--> SHM
       SP5 --Read/Write--> SHM
-      SPN --Read/Write--> SHM
+      SPK --Read/Write--> SHM
     end
     SPJ1 --> STS
     STS --> SPJ1
