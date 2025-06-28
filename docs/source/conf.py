@@ -6,10 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "BlazeFL"
-copyright = "2024, kitsuyaazuma"
+import importlib.metadata
+
+project = "blazefl"
 author = "kitsuyaazuma"
-release = "0.1.1"
+copyright = f"2025, {author}"
+release = importlib.metadata.version(project)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

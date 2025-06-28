@@ -6,6 +6,8 @@ on:
   push:
     tags:
       - 'v*.*.*.dev*'
+      - 'v*.*.*a*'
+      - 'v*.*.*b*'
 
 jobs:
   run:
