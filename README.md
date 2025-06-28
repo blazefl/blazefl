@@ -1,4 +1,4 @@
-<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/logo.svg" width=600></div>
+<div align="center"><img src="docs/imgs/logo.svg" width=600></div>
 <div align="center">A blazing-fast, minimalist, and researcher-friendly simulation framework for Federated Learning</div>
 <br>
 <div align="center">
