@@ -1,7 +1,10 @@
 import random
 import threading
+from collections.abc import Iterable
+from concurrent.futures import Future, as_completed
 from dataclasses import dataclass
 from enum import StrEnum
+from multiprocessing.pool import ApplyResult
 from pathlib import Path
 from typing import Literal
 
@@ -552,6 +555,12 @@ class FedAvgProcessPoolClientTrainer(
         self.manager = mp.Manager()
         self.stop_event = self.manager.Event()
 
+    def progress_fn(
+        self,
+        it: list[ApplyResult],
+    ) -> Iterable[ApplyResult]:
+        return tqdm(it, desc="Client", leave=False)
+
     @staticmethod
     def worker(
         config: FedAvgClientConfig | Path,
@@ -764,6 +773,11 @@ class FedAvgThreadPoolClientTrainer(
         self.num_clients = num_clients
         self.seed = seed
         self.stop_event = threading.Event()
+
+    def progress_fn(
+        self, it: list[Future[FedAvgUplinkPackage]]
+    ) -> Iterable[Future[FedAvgUplinkPackage]]:
+        return tqdm(as_completed(it), total=len(it), desc="Client", leave=False)
 
     def worker(
         self,

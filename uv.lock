@@ -87,6 +87,10 @@ source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "torch" },
+]
+
+[package.optional-dependencies]
+contrib = [
     { name = "tqdm" },
 ]
 
@@ -97,6 +101,7 @@ dev = [
     { name = "psutil" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "tqdm" },
     { name = "types-psutil" },
     { name = "types-tqdm" },
 ]
@@ -110,8 +115,9 @@ docs = [
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "torch", specifier = ">=2.5.1" },
-    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "tqdm", marker = "extra == 'contrib'", specifier = ">=4.67.1" },
 ]
+provides-extras = ["contrib"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -120,6 +126,7 @@ dev = [
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "ruff", specifier = ">=0.8.2" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "types-psutil", specifier = ">=7.0.0.20250601" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250516" },
 ]
@@ -128,7 +135,6 @@ docs = [
     { name = "sphinx-autobuild", specifier = ">=2024.10.3" },
     { name = "sphinx-book-theme", specifier = ">=1.1.3" },
 ]
-test = []
 
 [[package]]
 name = "certifi"
@@ -819,7 +825,7 @@ name = "quickstart-fedavg"
 version = "0.1.0"
 source = { virtual = "examples/quickstart-fedavg" }
 dependencies = [
-    { name = "blazefl" },
+    { name = "blazefl", extra = ["contrib"] },
     { name = "hydra-core" },
     { name = "tensorboard" },
     { name = "torchvision" },
@@ -829,11 +835,12 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "types-tqdm" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "blazefl", editable = "." },
+    { name = "blazefl", extras = ["contrib"], editable = "." },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "tensorboard", specifier = ">=2.19.0" },
     { name = "torchvision", specifier = ">=0.22.0" },
@@ -843,6 +850,7 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.13.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
+    { name = "types-tqdm", specifier = ">=4.67.0.20250516" },
 ]
 
 [[package]]
