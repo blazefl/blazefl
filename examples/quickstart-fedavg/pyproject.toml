@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "blazefl>=1.0.2",
+    "blazefl[contrib]>=2.0.0a1",
     "hydra-core>=1.3.2",
     "tensorboard>=2.19.0",
     "torchvision>=0.22.0",
@@ -33,4 +33,5 @@ blazefl = { workspace = true }
 dev = [
     "mypy>=1.13.0",
     "pre-commit>=4.2.0",
+    "types-tqdm>=4.67.0.20250516",
 ]
