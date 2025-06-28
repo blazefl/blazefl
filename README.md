@@ -1,5 +1,5 @@
-<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/BlazeFL/refs/heads/main/docs/imgs/logo.svg" width=600></div>
-<div align="center">A blazing-fast and lightweight simulation framework for Federated Learning</div>
+<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/logo.svg" width=600></div>
+<div align="center">A blazing-fast, minimalist, and researcher-friendly simulation framework for Federated Learning</div>
 <br>
 <div align="center">
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
@@ -9,108 +9,189 @@
 </div>
 
 
-## Why Choose BlazeFL?
+## Feature Highlights
 
-- 🚀 **High Performance**: Optimized for single-node simulations, BlazeFL allows you to adjust the degree of parallelism. For example, if you want to simulate 100 clients on a single node but lack the resources to run them all concurrently, you can configure 10 parallel processes to manage the simulation efficiently. 
+- 🚀 **High Performance**: Optimized for single-node simulations, BlazeFL allows you to adjust the degree of parallelism for efficient resource management. 
 
-- 🔧 **Extensibility**: BlazeFL provides interfaces solely for communication and parallelization, avoiding excessive abstraction. This design ensures that the framework remains flexible and adaptable to various use cases.
+- 🧩 **High Extensibility**: BlazeFL focuses on core communication and parallelization interfaces, avoiding excessive abstraction to maintain flexibility. 
 
-- 📦 **Minimal Dependencies**: Minimal Dependencies: The core components of BlazeFL rely only on [PyTorch](https://github.com/pytorch/pytorch), ensuring a lightweight and straightforward setup. 
+- 🍃 **Minimal Dependencies**: The framework's core relies only on [PyTorch](https://github.com/pytorch/pytorch), ensuring a lightweight and straightforward setup. 
 
-- 🔄 **Robust Reproducibility**: Even in multi-process environments, BlazeFL offers utilities to save and restore seed states, ensuring consistent and reproducible results across simulations.
+- 🔄 **Robust Reproducibility**: Utilities for saving and restoring seed states are provided to ensure consistent results, even in multi-process environments.
 
-- 🏷️ **Type Hint Support**: The framework fully supports type hints, enhancing code readability and maintainability.
+- 🛡️ **Structured and Type-Safe by Design**: By leveraging [dataclasses](https://docs.python.org/3/library/dataclasses.html) and [protocols](https://typing.python.org/en/latest/spec/protocol.html), BlazeFL enables the creation of clear, type-safe, and self-documenting communication packages (`UplinkPackage`, `DownlinkPackage`). This design enhances code readability, maintainability, and reduces errors in FL workflows.
 
-- 🔗 **Loose Compatibility with FedLab**: Inspired by [FedLab](https://github.com/SMILELab-FL/FedLab), BlazeFL maintains a degree of compatibility, facilitating an easy transition to production-level implementations when necessary.
+## Execution Modes
 
-## How BlazeFL Works
+BlazeFL offers three distinct execution modes, each providing a different balance between implementation simplicity and performance.
 
-BlazeFL enhances performance by storing shared parameters on disk instead of shared memory, enabling efficient parameter sharing across processes, simplifying memory management, and reducing overhead.
+### 1. Single-Threaded Mode
 
-<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/BlazeFL/refs/heads/main/docs/imgs/architecture.png"></div>
+**Executes clients sequentially in a single thread.**
 
-## Quick Start
+This is the most straightforward mode, making it ideal for simple simulations or debugging, though it offers the lowest throughput. This mode is implemented using the `BaseClientTrainer` class.
+
+```mermaid
+graph LR
+    subgraph "`BaseServerHandler`"
+      STS[Server]
+    end
+    subgraph "BaseClientTrainer"
+      STJ@{ shape: f-circ, label: "Junction" } --> ST1[Client 1]
+      ST1 --> ST2[Client 2]
+      ST2 --> ST3[Client 3]
+      ST3 -...-> STK-2[Client K-2]
+      STK-2 -..-> STK-1[Client K-1]
+      STK-1 --> STK[Client K]
+    end
+    STK --> STJ
+    STJ --> STS
+    STS --> STJ
+```
+
+### 2. Multi-Threaded Mode (Experimental)
+
+**Leverages multiple threads to process clients in parallel within the same process.**
+
+This mode, implemented via the `ThreadPoolClientTrainer` class, can offer faster performance while maintaining a simpler implementation than multi-processing.
+
+> [!IMPORTANT]
+> To achieve true parallelism, this mode requires [Python 3.13+ with the experimental free-threading build](https://docs.python.org/3/howto/free-threading-python.html) enabled. Without it, performance will be limited by the Global Interpreter Lock (GIL), resulting in concurrency rather than true parallelism.
+
+```mermaid
+graph LR
+    subgraph "`BaseServerHandler`"
+      STS[Server]
+    end
+
+    subgraph "ThreadPoolClientTrainer (e.g. Max Threads = 3)"
+      MEM@{ shape: win-pane, label: "Memory" }
+      STJ1@{ shape: f-circ, label: "Junction" }
+      subgraph "Thread 1"
+        ST1[Client 1] --> ST4[Client 4]
+        ST4 -.-> STK-2[Client K-2]
+      end
+      subgraph "Thread 2"
+        ST2[Client 2] --> ST5[Client 5]
+        ST5 -.-> STK-1[Client K-1]
+      end
+      subgraph "Thread 3"
+        ST3[Client 3] --> ST6[Client 6]
+        ST6 -.-> STK[Client K]
+      end
+      STJ1 --> ST1
+      STJ1 --> ST2
+      STJ1 --> ST3
+      STK-2 --> STJ2@{ shape: f-circ, label: "Junction" }
+      STK-1 --> STJ2
+      STK --> STJ2
+      STJ2 --> STJ1
+      STJ1 --Write/Read--> MEM
+      ST1 --Read/Write--> MEM
+      ST5 --Read/Write--> MEM
+      STK --Read/Write--> MEM
+    end
+    STJ1 --> STS
+    STS --> STJ1
+```
+
+### 3. Multi-Process Mode
+
+**Utilizes separate processes to achieve true parallelism and robust resource isolation.**
+
+This production-ready mode, corresponding to the `ProcessPoolClientTrainer` class, offers excellent performance. It provides two options for Inter-Process Communication (IPC), configurable via the `ipc_mode` parameter, to suit your needs:
+- **Storage Mode**: Shares parameters via disk, reducing memory usage.
+- **Shared Memory Mode**: Shares parameters directly in shared memory for potentially faster performance.
+
+```mermaid
+graph LR
+    subgraph "`BaseServerHandler`"
+      STS[Server]
+    end
+
+    subgraph "ProcessPoolClientTrainer (e.g. Max Processes = 3)"
+      SHM[("<center>Shared Memory<br>or<br>Storage</center>")]
+      SPJ1@{ shape: f-circ, label: "Junction" }
+      subgraph "Process 1"
+        SP1[Client 1] --> SP4[Client 4]
+        SP4 -.-> SPK-2[Client K-2]
+      end
+      subgraph "Process 2"
+        SP2[Client 2] --> SP5[Client 5]
+        SP5 -.-> SPK-1[Client K-1]
+      end
+      subgraph "Process 3"
+        SP3[Client 3] --> SP6[Client 6]
+        SP6 -.-> SPK[Client K]
+      end
+      SPJ1 --> SP1
+      SPJ1 --> SP2
+      SPJ1 --> SP3
+      SPK-2 --> SPJ2@{ shape: f-circ, label: "Junction" }
+      SPK-1 --> SPJ2
+      SPK --> SPJ2
+      SPJ2 --> SPJ1
+      SPJ1 --Write/Read--> SHM
+      SP1 --Read/Write--> SHM
+      SP5 --Read/Write--> SHM
+      SPK --Read/Write--> SHM
+    end
+    SPJ1 --> STS
+    STS --> SPJ1
+```
+
+## Getting Started
 
 ### Installation
 
 BlazeFL is available on PyPI and can be installed using your preferred package manager.
- 
-For example:
+
+For example, using [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
 uv add blazefl
-# or
-poetry add blazefl
-# or
-pip install blazefl
 ```
 
-### Running Examples
+### Examples
 
-Quick start code is in [examples/quickstart-fedavg](https://github.com/kitsuyaazuma/BlazeFL/tree/main/examples/quickstart-fedavg).
+| Example | Description | 
+|---------|-------------|
+| [Quickstart: FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering both **single-threaded** and **multi-process** modes. |
+| [Experimental: Multi-Threaded FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.13+'s experimental free-threading mode. | 
+| [Step-by-Step Tutorial: DS-FL](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
 
-For a more detailed implementation guide, checkout the [examples/step-by-step-dsfl](https://github.com/kitsuyaazuma/BlazeFL/tree/main/examples/step-by-step-dsfl).
+## Simulation Benchmarks
 
+To evaluate the performance of BlazeFL, we conducted a comparative benchmark against [Flower](https://github.com/adap/flower), a popular FL framework.
 
-## FL Simulation Benchmarks
+### Benchmark Setup
 
-Benchmarks were conducted using Google Cloud’s Compute Engine with the following specifications:
+The benchmark was performed using the **FedAvg** algorithm on the **CIFAR-10** dataset. The simulation was configured with **100 clients**, **5 communication** rounds, and **5 local epochs** for two models: a small [CNN](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html) and a large [ResNet18](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html).
 
-<details>
-<summary> Machine Configuration</summary>
+### Execution Environment
 
-- Machine Type: [a2-highgpu-1g](https://cloud.google.com/compute/docs/gpus#a2-standard) (vCPU count: 12, VM memory: 85 GB)
-- CPU Platform: Intel Cascade Lake
-- GPU: 1 x NVIDIA A100 40GB
-- Boot Disk: 250 GB SSD
-</details>
+The benchmark was conducted in the following Podman container environment:
+- **CPU**: 12 CPU
+- **Memory**: 85 GB
+- **Shared Memory**: 32 GB
+- **GPU**: 2 x NVIDIA RTX A6000
 
+> [!NOTE]
+> This benchmark was run in a container, and the resources are not completely isolated from other processes. Therefore, please consider these results as reference values. A more rigorous evaluation is planned to be conducted on a cloud VM in the future.
 
-<details>
-<summary> Benchmark Setup</summary>
-
-- Algorithm: [FedAvg](https://proceedings.mlr.press/v54/mcmahan17a)
-- Dataset: [CIFAR-10](https://www.cs.toronto.edu/~kriz/cifar.html)
-- Number of Clients: 100
-- Communication Rounds: 5
-- Local Training: 5 epochs, Learning Rate: 0.1, Batch Size: 50
-- Role
-  -	Server: Aggregation
-  -	Clients: Training and Evaluation (80% training, 20% evaluation)
-- Models
-  - [CNN](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html) (size: 0.24 MB)
-  - [ResNet18](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html) (size: 44.59 MB)
-
-</details>
-
-For benchmarking purposes, we utilized Flower’s [Quickstart Example](https://github.com/adap/flower/tree/main/examples/quickstart-pytorch) as a baseline to evaluate BlazeFL’s performance and efficiency.
+### Results
 
 <div style="display: flex; justify-content: center; align-items: center;">
-  <img src="https://raw.githubusercontent.com/kitsuyaazuma/BlazeFL/refs/heads/main/docs/imgs/benchmark_cnn.png" alt="CNN" width="45%" />
-  <img src="https://raw.githubusercontent.com/kitsuyaazuma/BlazeFL/refs/heads/main/docs/imgs/benchmark_resnet18.png" alt="ResNet18" width="45%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.svg" alt="CNN" width="48%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="48%" />
 </div>
+<br>
+
+The benchmark results indicate that BlazeFL has competitive performance against Flower. This is noteworthy as BlazeFL achieves this with a significantly smaller codebase relying only on standard Python libraries and PyTorch, whereas Flower is a powerful framework built on top of Ray. In particular, the experimental multi-threaded mode shows the potential for even higher performance due to its lightweight threads.
 
 
 ## Contributing
 
-We welcome contributions from the community! If you'd like to contribute to this project, please follow these guidelines:
+We welcome contributions from the community! If you'd like to contribute to this project, please see our [contribution guidelines](https://github.com/kitsuyaazuma/blazefl/blob/main/docs/source/contribute.rst) for more information on how to get started.
 
-### Issues
-
-If you encounter a bug, have a feature request, or would like to suggest an improvement, please open an issue on the GitHub repository. Make sure to provide detailed information about the problem or suggestion.
-
-### Pull Requests
-
-We gladly accept pull requests! Before submitting a pull request, please ensure the following:
-
-1. Fork the repository and create your branch from main.
-2. Ensure your code adheres to the project's coding standards.
-3. Test your changes thoroughly.
-4. Make sure your commits are descriptive and well-documented.
-5. Update the README and any relevant documentation if necessary.
-
-### Code of Conduct
-
-Please note that this project is governed by our [Code of Conduct](https://github.com/kitsuyaazuma/BlazeFL/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report any unacceptable behavior.
-
-Thank you for contributing to our project!
+Please note that this project is governed by our [Code of Conduct](https://github.com/kitsuyaazuma/blazefl/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
