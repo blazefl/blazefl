@@ -1,4 +1,4 @@
-<div align="center"><img src="docs/imgs/logo.svg" width=600></div>
+<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/logo.svg" width=600></div>
 <div align="center">A blazing-fast, minimalist, and researcher-friendly simulation framework for Federated Learning</div>
 <br>
 <div align="center">
@@ -182,8 +182,8 @@ The benchmark was conducted in the following Podman container environment:
 ### Results
 
 <div style="display: flex; justify-content: center; align-items: center;">
-  <img src="docs/imgs/benchmark_cnn.svg" alt="CNN" width="48%" />
-  <img src="docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="48%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.svg" alt="CNN" width="48%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="48%" />
 </div>
 <br>
 
@@ -192,6 +192,6 @@ The benchmark results indicate that BlazeFL has competitive performance against 
 
 ## Contributing
 
-We welcome contributions from the community! If you'd like to contribute to this project, please see our [contribution guidelines](docs/source/contribute.rst) for more information on how to get started.
+We welcome contributions from the community! If you'd like to contribute to this project, please see our [contribution guidelines](https://github.com/kitsuyaazuma/blazefl/blob/main/docs/source/contribute.rst) for more information on how to get started.
 
-Please note that this project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+Please note that this project is governed by our [Code of Conduct](https://github.com/kitsuyaazuma/blazefl/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
