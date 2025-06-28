@@ -1,8 +1,10 @@
 import random
 import threading
 from collections import defaultdict
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
+from multiprocessing.pool import ApplyResult
 from pathlib import Path
 
 import torch
@@ -18,6 +20,7 @@ from blazefl.utils import (
     seed_everything,
 )
 from torch.utils.data import DataLoader, Subset
+from tqdm import tqdm
 
 from dataset import DSFLPartitionedDataset, DSFLPartitionType
 from models import DSFLModelSelector
@@ -311,6 +314,12 @@ class DSFLProcessPoolClientTrainer(
 
         if self.device == "cuda":
             self.device_count = torch.cuda.device_count()
+
+    def progress_fn(
+        self,
+        it: list[ApplyResult],
+    ) -> Iterable[ApplyResult]:
+        return tqdm(it, desc="Client", leave=False)
 
     @staticmethod
     def worker(
