@@ -107,6 +107,17 @@ def main(cfg: DictConfig):
         | None
     ) = None
     match cfg.execution_mode:
+        case "single-threaded":
+            trainer = FedAvgBaseClientTrainer(
+                model_selector=model_selector,
+                model_name=cfg.model_name,
+                dataset=dataset,
+                device=device,
+                num_clients=cfg.num_clients,
+                epochs=cfg.epochs,
+                lr=cfg.lr,
+                batch_size=cfg.batch_size,
+            )
         case "multi-process":
             trainer = FedAvgProcessPoolClientTrainer(
                 model_selector=model_selector,
@@ -123,18 +134,7 @@ def main(cfg: DictConfig):
                 num_parallels=cfg.num_parallels,
                 ipc_mode=cfg.ipc_mode,
             )
-        case "single-thread":
-            trainer = FedAvgBaseClientTrainer(
-                model_selector=model_selector,
-                model_name=cfg.model_name,
-                dataset=dataset,
-                device=device,
-                num_clients=cfg.num_clients,
-                epochs=cfg.epochs,
-                lr=cfg.lr,
-                batch_size=cfg.batch_size,
-            )
-        case "multi-thread":
+        case "multi-threaded":
             trainer = FedAvgThreadPoolClientTrainer(
                 model_selector=model_selector,
                 model_name=cfg.model_name,

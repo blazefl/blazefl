@@ -1,13 +1,13 @@
 import signal
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterable
+from concurrent.futures import Future, ThreadPoolExecutor
 from multiprocessing.pool import ApplyResult
 from pathlib import Path
 from typing import Literal, Protocol, TypeVar
 
 import torch
 import torch.multiprocessing as mp
-from tqdm import tqdm
 
 from blazefl.utils import move_tensor_to_shared_memory
 
@@ -84,6 +84,19 @@ class ProcessPoolClientTrainer(
     cache: list[UplinkPackage]
     ipc_mode: Literal["storage", "shared_memory"] = "storage"
     stop_event: threading.Event
+
+    def progress_fn(self, it: list[ApplyResult]) -> Iterable[ApplyResult]:
+        """
+        A no-op progress function that can be overridden to provide custom
+        progress tracking.
+
+        Args:
+            it (list[ApplyResult]): A list of ApplyResult objects.
+
+        Returns:
+            Iterable[ApplyResult]: The original iterable.
+        """
+        return it
 
     def get_client_config(self, cid: int) -> ClientConfig:
         """
@@ -189,7 +202,7 @@ class ProcessPoolClientTrainer(
                         )
                     )
 
-            for job in tqdm(jobs, desc="Client", leave=False):
+            for job in self.progress_fn(jobs):
                 result = job.get()
                 if self.ipc_mode == "storage":
                     assert isinstance(result, Path)
@@ -212,6 +225,22 @@ class ThreadPoolClientTrainer(
     device_count: int
     cache: list[UplinkPackage]
     stop_event: threading.Event
+
+    def progress_fn(
+        self, it: list[Future[UplinkPackage]]
+    ) -> Iterable[Future[UplinkPackage]]:
+        """
+        A no-op progress function that can be overridden to provide custom
+        progress tracking.
+
+        Args:
+            it (list[Future[UplinkPackage]]): A list of Future objects
+                representing the results of client processing.
+
+        Returns:
+            Iterable[Future[UplinkPackage]]: The original iterable.
+        """
+        return it
 
     def worker(
         self,
@@ -243,7 +272,7 @@ class ThreadPoolClientTrainer(
         self.stop_event.clear()
         executor = ThreadPoolExecutor(max_workers=self.num_parallels)
         try:
-            futures = []
+            futures: list[Future[UplinkPackage]] = []
             for cid in cid_list:
                 device = self.get_client_device(cid)
                 future = executor.submit(
@@ -255,12 +284,7 @@ class ThreadPoolClientTrainer(
                 )
                 futures.append(future)
 
-            for future in tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc="Client",
-                leave=False,
-            ):
+            for future in self.progress_fn(futures):
                 result = future.result()
                 self.cache.append(result)
         finally:
