@@ -1,4 +1,3 @@
-import random
 import threading
 from collections.abc import Iterable
 from concurrent.futures import Future, as_completed
@@ -22,11 +21,12 @@ from blazefl.core import (
     ThreadPoolClientTrainer,
 )
 from blazefl.utils import (
-    RandomState,
+    RNGSuite,
+    create_rng_suite,
     deserialize_model,
-    seed_everything,
     serialize_model,
 )
+from blazefl.utils.seed import setup_reproducibility
 
 
 @dataclass
@@ -36,11 +36,13 @@ class FedAvgUplinkPackage:
     in the Federated Averaging algorithm.
 
     Attributes:
+        cid (int): Client ID.
         model_parameters (torch.Tensor): Serialized model parameters from the client.
         data_size (int): Number of data samples used in the client's training.
         metadata (dict | None): Optional metadata, such as evaluation metrics.
     """
 
+    cid: int
     model_parameters: torch.Tensor
     data_size: int
     metadata: dict[str, float] | None = None
@@ -88,6 +90,7 @@ class FedAvgBaseServerHandler(
         updates before aggregation.
         num_clients_per_round (int): Number of clients sampled per round.
         round (int): Current training round.
+        seed (int): Seed for reproducibility.
     """
 
     def __init__(
@@ -100,6 +103,7 @@ class FedAvgBaseServerHandler(
         sample_ratio: float,
         device: str,
         batch_size: int,
+        seed: int,
     ) -> None:
         """
         Initialize the FedAvgBaseServerHandler.
@@ -120,10 +124,13 @@ class FedAvgBaseServerHandler(
         self.sample_ratio = sample_ratio
         self.device = device
         self.batch_size = batch_size
+        self.seed = seed
 
         self.client_buffer_cache: list[FedAvgUplinkPackage] = []
         self.num_clients_per_round = int(self.num_clients * self.sample_ratio)
         self.round = 0
+
+        self.rng_suite = create_rng_suite(self.seed)
 
     def sample_clients(self) -> list[int]:
         """
@@ -132,7 +139,7 @@ class FedAvgBaseServerHandler(
         Returns:
             list[int]: Sorted list of sampled client IDs.
         """
-        sampled_clients = random.sample(
+        sampled_clients = self.rng_suite.python.sample(
             range(self.num_clients), self.num_clients_per_round
         )
 
@@ -176,6 +183,7 @@ class FedAvgBaseServerHandler(
         Args:
             buffer (list[FedAvgUplinkPackage]): List of uplink packages from clients.
         """
+        buffer.sort(key=lambda x: x.cid)
         parameters_list = [ele.model_parameters for ele in buffer]
         weights_list = [ele.data_size for ele in buffer]
         serialized_parameters = self.aggregate(parameters_list, weights_list)
@@ -253,6 +261,7 @@ class FedAvgBaseServerHandler(
                 type_=FedAvgPartitionType.TEST,
                 cid=None,
                 batch_size=self.batch_size,
+                generator=self.rng_suite.torch_cpu,
             ),
             self.device,
         )
@@ -304,6 +313,7 @@ class FedAvgBaseClientTrainer(
         epochs: int,
         batch_size: int,
         lr: float,
+        seed: int,
     ) -> None:
         """
         Initialize the FedAvgBaseClientTrainer.
@@ -317,6 +327,7 @@ class FedAvgBaseClientTrainer(
             epochs (int): Number of local training epochs per client.
             batch_size (int): Batch size for local training.
             lr (float): Learning rate for the optimizer.
+            seed (int): Seed for reproducibility.
         """
         self.model = model_selector.select_model(model_name)
         self.dataset = dataset
@@ -325,11 +336,14 @@ class FedAvgBaseClientTrainer(
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
+        self.seed = seed
 
         self.model.to(self.device)
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr)
         self.criterion = torch.nn.CrossEntropyLoss()
         self.cache: list[FedAvgUplinkPackage] = []
+
+        self.rng_suite = create_rng_suite(self.seed)
 
     def local_process(
         self, payload: FedAvgDownlinkPackage, cid_list: list[int]
@@ -348,13 +362,19 @@ class FedAvgBaseClientTrainer(
         model_parameters = payload.model_parameters
         for cid in tqdm(cid_list, desc="Client", leave=False):
             data_loader = self.dataset.get_dataloader(
-                type_=FedAvgPartitionType.TRAIN, cid=cid, batch_size=self.batch_size
+                type_=FedAvgPartitionType.TRAIN,
+                cid=cid,
+                batch_size=self.batch_size,
+                generator=self.rng_suite.torch_cpu,
             )
-            pack = self.train(model_parameters, data_loader)
+            pack = self.train(model_parameters, data_loader, cid)
             self.cache.append(pack)
 
     def train(
-        self, model_parameters: torch.Tensor, train_loader: DataLoader
+        self,
+        model_parameters: torch.Tensor,
+        train_loader: DataLoader,
+        cid: int,
     ) -> FedAvgUplinkPackage:
         """
         Train the local model on the given training data loader.
@@ -388,7 +408,7 @@ class FedAvgBaseClientTrainer(
 
         model_parameters = serialize_model(self.model)
 
-        return FedAvgUplinkPackage(model_parameters, data_size)
+        return FedAvgUplinkPackage(cid, model_parameters, data_size)
 
     def evaluate(self, test_loader: DataLoader) -> tuple[float, float]:
         """
@@ -615,18 +635,21 @@ class FedAvgProcessPoolClientTrainer(
             device: str,
             stop_event: threading.Event,
         ) -> FedAvgUplinkPackage:
+            setup_reproducibility(config.seed)
             if config.state_path.exists():
                 state = torch.load(config.state_path, weights_only=False)
-                assert isinstance(state, RandomState)
-                RandomState.set_random_state(state)
+                assert isinstance(state, RNGSuite)
             else:
-                seed_everything(config.seed, device=device)
+                state = create_rng_suite(config.seed)
 
-            model = config.model_selector.select_model(config.model_name)
+            with torch.random.fork_rng():
+                torch.manual_seed(config.seed)
+                model = config.model_selector.select_model(config.model_name)
             train_loader = config.dataset.get_dataloader(
                 type_=FedAvgPartitionType.TRAIN,
                 cid=config.cid,
                 batch_size=config.batch_size,
+                generator=state.torch_cpu,
             )
             package = FedAvgProcessPoolClientTrainer.train(
                 model=model,
@@ -636,8 +659,9 @@ class FedAvgProcessPoolClientTrainer(
                 epochs=config.epochs,
                 lr=config.lr,
                 stop_event=stop_event,
+                cid=config.cid,
             )
-            torch.save(RandomState.get_random_state(device=device), config.state_path)
+            torch.save(state, config.state_path)
             return package
 
         if isinstance(config, Path) and isinstance(payload, Path):
@@ -661,6 +685,7 @@ class FedAvgProcessPoolClientTrainer(
         epochs: int,
         lr: float,
         stop_event: threading.Event,
+        cid: int,
     ) -> FedAvgUplinkPackage:
         """
         Train the model with the given training data loader.
@@ -702,7 +727,7 @@ class FedAvgProcessPoolClientTrainer(
 
         model_parameters = serialize_model(model)
 
-        return FedAvgUplinkPackage(model_parameters, data_size)
+        return FedAvgUplinkPackage(cid, model_parameters, data_size)
 
     def get_client_config(self, cid: int) -> FedAvgClientConfig:
         """
@@ -722,7 +747,7 @@ class FedAvgProcessPoolClientTrainer(
             batch_size=self.batch_size,
             lr=self.lr,
             cid=cid,
-            seed=self.seed,
+            seed=self.seed + cid,
             state_path=self.state_dir.joinpath(f"{cid}.pt"),
         )
         return data
@@ -773,6 +798,9 @@ class FedAvgThreadPoolClientTrainer(
         self.num_clients = num_clients
         self.seed = seed
         self.stop_event = threading.Event()
+        self.rng_suite_list = [
+            create_rng_suite(self.seed + i) for i in range(num_clients)
+        ]
 
     def progress_fn(
         self, it: list[Future[FedAvgUplinkPackage]]
@@ -791,6 +819,7 @@ class FedAvgThreadPoolClientTrainer(
             type_=FedAvgPartitionType.TRAIN,
             cid=cid,
             batch_size=self.batch_size,
+            generator=self.rng_suite_list[cid].torch_cpu,
         )
         package = self.train(
             model=model,
@@ -800,6 +829,7 @@ class FedAvgThreadPoolClientTrainer(
             epochs=self.epochs,
             lr=self.lr,
             stop_event=stop_event,
+            cid=cid,
         )
         return package
 
@@ -812,6 +842,7 @@ class FedAvgThreadPoolClientTrainer(
         epochs: int,
         lr: float,
         stop_event: threading.Event,
+        cid: int,
     ) -> FedAvgUplinkPackage:
         """
         Train the model with the given training data loader.
@@ -853,7 +884,7 @@ class FedAvgThreadPoolClientTrainer(
 
         model_parameters = serialize_model(model)
 
-        return FedAvgUplinkPackage(model_parameters, data_size)
+        return FedAvgUplinkPackage(cid, model_parameters, data_size)
 
     def uplink_package(self) -> list[FedAvgUplinkPackage]:
         package = self.cache

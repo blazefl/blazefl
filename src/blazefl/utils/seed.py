@@ -125,3 +125,43 @@ class RandomState:
             torch.cuda.set_rng_state(random_state._cuda.cuda_rng_state)
         else:
             torch.set_rng_state(random_state._torch_rng_state)
+
+
+def seed_worker(worker_id: int):
+    """
+    Adapted from https://docs.pytorch.org/docs/stable/notes/randomness.html
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def setup_reproducibility(seed: int) -> None:
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+@dataclass
+class RNGSuite:
+    python: random.Random
+    numpy: np.random.Generator
+    torch_cpu: torch.Generator
+    torch_cuda: torch.Generator | None = None
+
+
+def create_rng_suite(seed: int) -> RNGSuite:
+    python_rng = random.Random(seed)
+    numpy_rng = np.random.default_rng(seed)
+    torch_cpu_rng = torch.Generator(device="cpu").manual_seed(seed)
+
+    torch_cuda_rng = None
+    if torch.cuda.is_available():
+        torch_cuda_rng = torch.Generator("cuda").manual_seed(seed)
+
+    return RNGSuite(
+        python=python_rng,
+        numpy=numpy_rng,
+        torch_cpu=torch_cpu_rng,
+        torch_cuda=torch_cuda_rng,
+    )

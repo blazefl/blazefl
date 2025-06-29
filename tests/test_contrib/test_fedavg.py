@@ -3,7 +3,6 @@ import signal
 import time
 from contextlib import suppress
 
-# from multiprocessing import Process
 import psutil
 import pytest
 import torch
@@ -18,6 +17,7 @@ from src.blazefl.contrib.fedavg import (
     FedAvgThreadPoolClientTrainer,
 )
 from src.blazefl.core import ModelSelector, PartitionedDataset
+from src.blazefl.utils import seed_worker
 
 
 class DummyModelSelector(ModelSelector):
@@ -55,11 +55,22 @@ class DummyPartitionedDataset(PartitionedDataset):
             cid = 0
         return self.datasets[cid]
 
-    def get_dataloader(self, type_: str, cid: int | None, batch_size: int | None):
+    def get_dataloader(
+        self,
+        type_: str,
+        cid: int | None,
+        batch_size: int | None,
+        generator: torch.Generator | None = None,
+    ):
         dataset = self.get_dataset(type_, cid)
         if batch_size is None:
             batch_size = len(dataset)
-        return DataLoader(dataset, batch_size=batch_size)
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            generator=generator,
+            worker_init_fn=seed_worker,
+        )
 
 
 @pytest.fixture
@@ -99,6 +110,7 @@ def test_base_server_and_base_trainer_integration(
     epochs = 1
     batch_size = 2
     lr = 0.01
+    seed = 42
 
     server = FedAvgBaseServerHandler(
         model_selector=model_selector,
@@ -109,6 +121,7 @@ def test_base_server_and_base_trainer_integration(
         sample_ratio=sample_ratio,
         device=device,
         batch_size=batch_size,
+        seed=seed,
     )
 
     trainer = FedAvgBaseClientTrainer(
@@ -120,6 +133,7 @@ def test_base_server_and_base_trainer_integration(
         epochs=epochs,
         batch_size=batch_size,
         lr=lr,
+        seed=seed,
     )
 
     cids = server.sample_clients()
@@ -171,6 +185,7 @@ def test_base_handler_and_process_pool_trainer_integration(
         sample_ratio=sample_ratio,
         device=device,
         batch_size=batch_size,
+        seed=seed,
     )
 
     trainer = FedAvgProcessPoolClientTrainer(
@@ -229,6 +244,7 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
         sample_ratio=sample_ratio,
         device=device,
         batch_size=batch_size,
+        seed=seed,
     )
 
     trainer_init_args = {
@@ -290,6 +306,7 @@ def test_base_handler_and_thread_pool_trainer_integration(
         sample_ratio=sample_ratio,
         device=device,
         batch_size=batch_size,
+        seed=seed,
     )
 
     trainer = FedAvgThreadPoolClientTrainer(
@@ -355,6 +372,7 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
         sample_ratio=sample_ratio,
         device=device,
         batch_size=batch_size,
+        seed=seed,
     )
 
     trainer_args = {

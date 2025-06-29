@@ -73,8 +73,8 @@ def main(cfg: DictConfig):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
+    # elif torch.backends.mps.is_available():
+    #     device = "mps"
     logging.info(f"device: {device}")
 
     seed_everything(cfg.seed, device=device)
@@ -99,6 +99,7 @@ def main(cfg: DictConfig):
         device=device,
         sample_ratio=cfg.sample_ratio,
         batch_size=cfg.batch_size,
+        seed=cfg.seed,
     )
     trainer: (
         FedAvgBaseClientTrainer
@@ -117,6 +118,7 @@ def main(cfg: DictConfig):
                 epochs=cfg.epochs,
                 lr=cfg.lr,
                 batch_size=cfg.batch_size,
+                seed=cfg.seed,
             )
         case "multi-process":
             trainer = FedAvgProcessPoolClientTrainer(

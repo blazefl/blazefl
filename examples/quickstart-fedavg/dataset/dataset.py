@@ -5,7 +5,8 @@ import torch
 import torchvision
 from blazefl.contrib import FedAvgPartitionType
 from blazefl.core import PartitionedDataset
-from blazefl.utils import FilteredDataset
+from blazefl.utils import FilteredDataset, seed_worker
+from torch import Generator
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
@@ -123,10 +124,20 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
         return dataset
 
     def get_dataloader(
-        self, type_: FedAvgPartitionType, cid: int | None, batch_size: int | None = None
+        self,
+        type_: FedAvgPartitionType,
+        cid: int | None,
+        batch_size: int | None = None,
+        generator: Generator | None = None,
     ) -> DataLoader:
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        data_loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            generator=generator,
+            worker_init_fn=seed_worker,
+        )
         return data_loader
