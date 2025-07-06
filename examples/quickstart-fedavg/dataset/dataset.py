@@ -5,7 +5,7 @@ import torch
 import torchvision
 from blazefl.contrib import FedAvgPartitionType
 from blazefl.core import PartitionedDataset
-from blazefl.utils import FilteredDataset, seed_worker
+from blazefl.utils import FilteredDataset, create_rng_suite, seed_worker
 from torch import Generator
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -51,6 +51,8 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
             ]
         )
 
+        self.rng_suite = create_rng_suite(seed)
+
         self._preprocess()
 
     def _preprocess(self):
@@ -79,6 +81,7 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
                     client_sample_nums=balance_split(
                         len(train_dataset.targets), self.num_clients
                     ),
+                    numpy_seed=self.seed,
                 )
             case "shards":
                 assert self.num_shards is not None
@@ -86,6 +89,7 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
                     targets=train_dataset.targets,
                     num_clients=self.num_clients,
                     num_shards=self.num_shards,
+                    numpy_seed=self.seed,
                 )
             case _:
                 raise ValueError(f"Invalid partition: {self.partition}")
@@ -133,11 +137,26 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
-        data_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            generator=generator,
-            worker_init_fn=seed_worker,
-        )
+        with torch.random.fork_rng():
+            torch.manual_seed(42)
+            data_loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                generator=generator,
+                worker_init_fn=seed_worker,
+            )
+        if cid == 0:
+            data = None
+            for data, _ in data_loader:
+                data = data
+                break
+            assert data is not None
+            if Path("data.pkl").exists():
+                last_data = torch.load("data.pkl")
+                assert torch.allclose(
+                    last_data,
+                    data,
+                ), f"Data mismatch: {last_data[0]} vs {data[0]}"
+            torch.save(data, "data.pkl")
         return data_loader

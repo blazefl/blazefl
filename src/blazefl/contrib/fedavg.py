@@ -410,42 +410,6 @@ class FedAvgBaseClientTrainer(
 
         return FedAvgUplinkPackage(cid, model_parameters, data_size)
 
-    def evaluate(self, test_loader: DataLoader) -> tuple[float, float]:
-        """
-        Evaluate the local model on the given test data loader.
-
-        Args:
-            test_loader (DataLoader): DataLoader for the evaluation data.
-
-        Returns:
-            tuple[float, float]: A tuple containing the average loss and accuracy.
-        """
-        self.model.eval()
-
-        total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
-        with torch.no_grad():
-            for inputs, labels in test_loader:
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
-
-                _, predicted = torch.max(outputs, 1)
-                correct = torch.sum(predicted.eq(labels)).item()
-
-                batch_size = labels.size(0)
-                total_loss += loss.item() * batch_size
-                total_correct += int(correct)
-                total_samples += batch_size
-
-        avg_loss = total_loss / total_samples
-        avg_acc = total_correct / total_samples
-
-        return avg_loss, avg_acc
-
     def uplink_package(self) -> list[FedAvgUplinkPackage]:
         """
         Retrieve the uplink packages for transmission to the server.
@@ -642,9 +606,7 @@ class FedAvgProcessPoolClientTrainer(
             else:
                 state = create_rng_suite(config.seed)
 
-            with torch.random.fork_rng():
-                torch.manual_seed(config.seed)
-                model = config.model_selector.select_model(config.model_name)
+            model = config.model_selector.select_model(config.model_name)
             train_loader = config.dataset.get_dataloader(
                 type_=FedAvgPartitionType.TRAIN,
                 cid=config.cid,
