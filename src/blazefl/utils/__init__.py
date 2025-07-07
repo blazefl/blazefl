@@ -9,11 +9,10 @@ and model serialization/deserialization.
 from blazefl.utils.dataset import FilteredDataset
 from blazefl.utils.ipc import move_tensor_to_shared_memory
 from blazefl.utils.seed import (
-    RandomState,
+    RandomStateSnapshot,
     RNGSuite,
     create_rng_suite,
     seed_everything,
-    seed_worker,
 )
 from blazefl.utils.serialize import deserialize_model, serialize_model
 
@@ -23,8 +22,7 @@ __all__ = [
     "FilteredDataset",
     "move_tensor_to_shared_memory",
     "seed_everything",
-    "RandomState",
+    "RandomStateSnapshot",
     "create_rng_suite",
     "RNGSuite",
-    "seed_worker",
 ]
