@@ -4,8 +4,8 @@ from pathlib import Path
 import torch
 import torchvision
 from blazefl.contrib import FedAvgPartitionType
-from blazefl.core import PartitionedDataset
-from blazefl.utils import FilteredDataset, create_rng_suite
+from blazefl.core import FilteredDataset, PartitionedDataset
+from blazefl.reproducibility import create_rng_suite
 from torch import Generator
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
