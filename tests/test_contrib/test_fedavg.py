@@ -17,7 +17,6 @@ from src.blazefl.contrib.fedavg import (
     FedAvgThreadPoolClientTrainer,
 )
 from src.blazefl.core import ModelSelector, PartitionedDataset
-from src.blazefl.utils import seed_worker
 
 
 class DummyModelSelector(ModelSelector):
@@ -69,7 +68,6 @@ class DummyPartitionedDataset(PartitionedDataset):
             dataset,
             batch_size=batch_size,
             generator=generator,
-            worker_init_fn=seed_worker,
         )
 
 

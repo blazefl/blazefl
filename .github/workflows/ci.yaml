@@ -39,7 +39,6 @@ jobs:
 
       - name: Run pytest
         run: uv run pytest tests --junitxml=pytest.xml
-        continue-on-error: true
 
       - name: Upload pytest results
         if: ${{ always() }}
