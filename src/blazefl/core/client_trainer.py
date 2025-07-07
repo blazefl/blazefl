@@ -9,7 +9,7 @@ from typing import Literal, Protocol, TypeVar
 import torch
 import torch.multiprocessing as mp
 
-from blazefl.utils import move_tensor_to_shared_memory
+from blazefl.core.utils import move_tensor_to_shared_memory
 
 UplinkPackage = TypeVar("UplinkPackage")
 DownlinkPackage = TypeVar("DownlinkPackage", contravariant=True)

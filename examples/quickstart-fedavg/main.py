@@ -11,7 +11,7 @@ from blazefl.contrib import (
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
 )
-from blazefl.utils.seed import setup_reproducibility
+from blazefl.reproducibility import setup_reproducibility
 from hydra.core import hydra_config
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -73,8 +73,8 @@ def main(cfg: DictConfig):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda"
-    # elif torch.backends.mps.is_available():
-    #     device = "mps"
+    elif torch.backends.mps.is_available():
+        device = "mps"
     logging.info(f"device: {device}")
 
     setup_reproducibility(cfg.seed)

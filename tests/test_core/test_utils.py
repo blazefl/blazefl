@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from src.blazefl.utils import deserialize_model, serialize_model
+from src.blazefl.core import deserialize_model, serialize_model
 
 
 @pytest.fixture

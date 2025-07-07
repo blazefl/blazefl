@@ -1,5 +1,5 @@
 import threading
-from blazefl.utils import move_tensor_to_shared_memory as move_tensor_to_shared_memory
+from blazefl.core.utils import move_tensor_to_shared_memory as move_tensor_to_shared_memory
 from collections.abc import Iterable
 from concurrent.futures import Future as Future
 from multiprocessing.pool import ApplyResult as ApplyResult
