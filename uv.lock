@@ -92,6 +92,9 @@ dependencies = [
 contrib = [
     { name = "tqdm" },
 ]
+reproducibility = [
+    { name = "numpy" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -112,10 +115,11 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "numpy", marker = "extra == 'reproducibility'", specifier = ">=2.3.1" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "tqdm", marker = "extra == 'contrib'", specifier = ">=4.67.1" },
 ]
-provides-extras = ["contrib"]
+provides-extras = ["contrib", "reproducibility"]
 
 [package.metadata.requires-dev]
 dev = [

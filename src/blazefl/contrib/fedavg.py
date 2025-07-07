@@ -19,14 +19,14 @@ from blazefl.core import (
     PartitionedDataset,
     ProcessPoolClientTrainer,
     ThreadPoolClientTrainer,
-)
-from blazefl.utils import (
-    RNGSuite,
-    create_rng_suite,
     deserialize_model,
     serialize_model,
 )
-from blazefl.utils.seed import setup_reproducibility
+from blazefl.reproducibility import (
+    RNGSuite,
+    create_rng_suite,
+    setup_reproducibility,
+)
 
 
 @dataclass

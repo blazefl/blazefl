@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
-import random
 import torch
+from blazefl.reproducibility.generator import setup_reproducibility as setup_reproducibility
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,14 +20,3 @@ class RandomStateSnapshot:
     def capture(cls) -> RandomStateSnapshot: ...
     @staticmethod
     def restore(snapshot: RandomStateSnapshot) -> None: ...
-
-def setup_reproducibility(seed: int) -> None: ...
-
-@dataclass
-class RNGSuite:
-    python: random.Random
-    numpy: np.random.Generator
-    torch_cpu: torch.Generator
-    torch_cuda: torch.Generator | None = ...
-
-def create_rng_suite(seed: int) -> RNGSuite: ...
