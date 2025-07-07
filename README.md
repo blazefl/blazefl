@@ -17,7 +17,7 @@
 
 - 🍃 **Minimal Dependencies**: The framework's core relies only on [PyTorch](https://github.com/pytorch/pytorch), ensuring a lightweight and straightforward setup. 
 
-- 🔄 **Robust Reproducibility**: Utilities for saving and restoring seed states are provided to ensure consistent results, even in multi-process environments.
+- 🔄 **Robust Reproducibility**: Utilities for saving and restoring seed states are provided to ensure consistent results, even in multi-process and multi-threaded environments.
 
 - 🛡️ **Structured and Type-Safe by Design**: By leveraging [dataclasses](https://docs.python.org/3/library/dataclasses.html) and [protocols](https://typing.python.org/en/latest/spec/protocol.html), BlazeFL enables the creation of clear, type-safe, and self-documenting communication packages (`UplinkPackage`, `DownlinkPackage`). This design enhances code readability, maintainability, and reduces errors in FL workflows.
 
