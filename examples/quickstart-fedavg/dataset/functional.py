@@ -118,7 +118,7 @@ def client_inner_dirichlet_partition_faster(
         client_sample_nums[curr_cid] -= 1
         curr_prior = prior_cumsum[curr_cid]
         while True:
-            curr_class = int(np.argmax(numpy_rng.uniform() <= curr_prior))
+            curr_class = np.int64(np.argmax(numpy_rng.uniform() <= curr_prior))
             # Redraw class label if no rest in current class samples
             if class_amount[curr_class] <= 0:
                 # Exception handling: If the current class has no samples left,

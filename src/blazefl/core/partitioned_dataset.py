@@ -31,6 +31,19 @@ class PartitionedDataset(Protocol[PartitionType]):
         """
         ...
 
+    def set_dataset(
+        self, type_: PartitionType, cid: int | None, dataset: Dataset
+    ) -> None:
+        """
+        Set a dataset for a specific type and client ID.
+
+        Args:
+            type_ (str): The type of the dataset.
+            cid (int | None): The client ID.
+            dataset (Dataset): The dataset to set.
+        """
+        ...
+
     def get_dataloader(
         self,
         type_: PartitionType,

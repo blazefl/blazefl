@@ -624,6 +624,11 @@ class FedAvgProcessPoolClientTrainer(
                 cid=config.cid,
             )
             torch.save(state, config.state_path)
+            config.dataset.set_dataset(
+                type_=FedAvgPartitionType.TRAIN,
+                cid=config.cid,
+                dataset=train_loader.dataset,
+            )
             return package
 
         if isinstance(config, Path) and isinstance(payload, Path):
