@@ -15,7 +15,7 @@ from dataset.functional import (
     client_inner_dirichlet_partition_faster,
     shards_partition,
 )
-from dataset.transforms import GeneratorRandomCrop
+from dataset.transforms import GeneratorRandomCrop, GeneratorRandomHorizontalFlip
 
 
 class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
@@ -42,8 +42,9 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
         self.train_transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.RandomHorizontalFlip(p=0.5),
-                # transforms.RandomCrop(32, padding=4),
+                GeneratorRandomHorizontalFlip(
+                    p=0.5, generator=self.rng_suite.torch_cpu
+                ),
                 GeneratorRandomCrop(32, padding=4, generator=self.rng_suite.torch_cpu),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
@@ -155,17 +156,4 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
             shuffle=True,
             generator=generator,
         )
-        # if cid == 0:
-        #     data = None
-        #     for data, _ in data_loader:
-        #         data = data
-        #         break
-        #     assert data is not None
-        #     if Path("data.pkl").exists():
-        #         last_data = torch.load("data.pkl")
-        #         assert torch.allclose(
-        #             last_data,
-        #             data,
-        #         ), f"Data mismatch: {last_data[0]} vs {data[0]}"
-        #     torch.save(data, "data.pkl")
         return data_loader

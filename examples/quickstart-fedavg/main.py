@@ -44,15 +44,6 @@ class FedAvgPipeline:
             self.trainer.local_process(broadcast, sampled_clients)
             uploads = self.trainer.uplink_package()
 
-            if round_ == 0:
-                assert uploads[0].cid == 0, "The first client should be client 0."
-                if Path("client_0_model.pth").exists():
-                    assert torch.allclose(
-                        uploads[0].model_parameters,
-                        torch.load("client_0_model.pth"),
-                    ), "The model parameters of client 0 do not match the saved model."
-                torch.save(uploads[0].model_parameters, "client_0_model.pth")
-
             # server side
             for pack in uploads:
                 self.handler.load(pack)

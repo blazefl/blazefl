@@ -1,7 +1,7 @@
 import torch
 import torchvision.transforms.functional as F
 from torch import Tensor
-from torchvision.transforms import RandomCrop
+from torchvision.transforms import RandomCrop, RandomHorizontalFlip
 
 
 class GeneratorRandomCrop(RandomCrop):
@@ -46,3 +46,14 @@ class GeneratorRandomCrop(RandomCrop):
         i, j, h, w = self._get_params(img, self.size)
 
         return F.crop(img, i, j, h, w)
+
+
+class GeneratorRandomHorizontalFlip(RandomHorizontalFlip):
+    def __init__(self, p=0.5, generator: torch.Generator | None = None):
+        super().__init__(p)
+        self.generator = generator
+
+    def forward(self, img):
+        if torch.rand(1, generator=self.generator) < self.p:
+            return F.hflip(img)
+        return img
