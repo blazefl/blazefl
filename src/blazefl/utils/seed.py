@@ -8,120 +8,159 @@ import numpy.typing as npt
 import torch
 
 
-def seed_everything(seed: int, device: str) -> None:
+def seed_everything(seed: int) -> None:
     """
-    Seed random number generators for reproducibility.
+    Seeds the global random number generators for all relevant libraries.
 
-    This function sets seeds for Python's random module, NumPy, and PyTorch
-    to ensure deterministic behavior in experiments.
+    This function sets a single seed for Python's `random` module, NumPy, and PyTorch
+    to ensure that results are consistent across runs. It directly manipulates the
+    global state of these libraries.
 
     Args:
-        seed (int): The seed value to set.
-        device (str): The device type ('cpu' or 'cuda').
-
-    Returns:
-        None
+        seed: The integer value for the seed.
     """
+    setup_reproducibility(seed)
+
     random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if device.startswith("cuda"):
+    if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
 
 @dataclass
-class CUDARandomState:
+class RandomStateSnapshot:
     """
-    A dataclass representing the random state for CUDA.
+    A snapshot of the global random state for major libraries.
+
+    This class provides a mechanism to capture the exact state of the global random
+    number generators and later restore it. This is useful for scenarios that require
+    resuming a process from a specific point in time with the identical sequence of
+    random numbers.
 
     Attributes:
-        manual_seed (int): The manual seed for CUDA.
-        cudnn_deterministic (bool): The deterministic setting for cuDNN.
-        cudnn_benchmark (bool): The benchmark setting for cuDNN.
-        cuda_rng_state (torch.Tensor): The RNG state for CUDA.
+        environ: The value of the `PYTHONHASHSEED` environment variable.
+        python: The internal state of Python's `random` module.
+        numpy: The internal state of NumPy's legacy random number generator.
+        torch_cpu: The RNG state of the PyTorch CPU generator.
+        torch_cpu_seed: The initial seed of the PyTorch CPU generator.
+        torch_cuda: The RNG state of the PyTorch CUDA generator, if available.
+        torch_cuda_seed: The initial seed of the PyTorch CUDA generator, if available.
     """
 
-    manual_seed: int
-    cudnn_deterministic: bool
-    cudnn_benchmark: bool
-    cuda_rng_state: torch.Tensor
-
-
-@dataclass
-class RandomState:
-    """
-    A dataclass representing the random state for Python, NumPy, and PyTorch.
-
-    Attributes:
-        _random (tuple): The state of Python's random module.
-        _environ (str): The PYTHONHASHSEED environment variable.
-        _numpy (tuple): The state of NumPy's RNG.
-        _torch_seed (int): The initial seed for PyTorch.
-        _torch_rng_state (torch.Tensor): The RNG state for PyTorch.
-        _cuda (CUDARandomState | None): The CUDA-specific random state, if available.
-    """
-
-    _random: tuple[Any, ...]
-    _environ: str
-    _numpy: tuple[str, npt.NDArray[np.uint32], int, int, float]
-    _torch_seed: int
-    _torch_rng_state: torch.Tensor
-    _cuda: CUDARandomState | None
+    environ: str
+    python: tuple[Any, ...]
+    numpy: tuple[str, npt.NDArray[np.uint32], int, int, float]
+    torch_cpu: torch.Tensor
+    torch_cpu_seed: int
+    torch_cuda: torch.Tensor | None
+    torch_cuda_seed: int | None
 
     @classmethod
-    def get_random_state(cls, device: str) -> "RandomState":
+    def capture(cls) -> "RandomStateSnapshot":
         """
-        Capture the current random state.
-
-        Args:
-            device (str): The device type ('cpu' or 'cuda').
+        Captures the current global random state.
 
         Returns:
-            RandomState: The captured random state.
+            A `RandomStateSnapshot` instance containing the captured states.
         """
-        _random = random.getstate()
         _environ = os.environ["PYTHONHASHSEED"]
+        _python = random.getstate()
         _numpy = np.random.get_state(legacy=True)
         assert isinstance(_numpy, tuple)
-        _torch_seed = torch.initial_seed()
-        _torch_rng_state = torch.get_rng_state()
+        _torch_cpu = torch.get_rng_state()
+        _torch_cpu_seed = torch.initial_seed()
 
-        random_state = cls(
-            _random, _environ, _numpy, _torch_seed, _torch_rng_state, None
+        snapshot = cls(
+            _environ, _python, _numpy, _torch_cpu, _torch_cpu_seed, None, None
         )
-        if device.startswith("cuda"):
-            random_state._torch_rng_state = torch.cuda.get_rng_state()
-            random_state._cuda = CUDARandomState(
-                torch.cuda.initial_seed(),
-                torch.backends.cudnn.deterministic,
-                torch.backends.cudnn.benchmark,
-                torch.cuda.get_rng_state(),
-            )
-        return random_state
+        if torch.cuda.is_available():
+            snapshot.torch_cuda = torch.cuda.get_rng_state()
+            snapshot.torch_cuda_seed = torch.cuda.initial_seed()
+        return snapshot
 
     @staticmethod
-    def set_random_state(random_state: "RandomState") -> None:
+    def restore(snapshot: "RandomStateSnapshot") -> None:
         """
-        Restore the random state from a RandomState object.
+        Restores the global random state from a snapshot object.
 
         Args:
-            random_state (RandomState): The random state to restore.
-
-        Returns:
-            None
+            snapshot: The `RandomStateSnapshot` to restore from.
         """
-        random.setstate(random_state._random)
-        os.environ["PYTHONHASHSEED"] = random_state._environ
-        np.random.set_state(random_state._numpy)
-        torch.manual_seed(random_state._torch_seed)
-        if random_state._cuda is not None:
-            torch.cuda.manual_seed(random_state._cuda.manual_seed)
-            torch.backends.cudnn.deterministic = random_state._cuda.cudnn_deterministic
-            torch.backends.cudnn.benchmark = random_state._cuda.cudnn_benchmark
-            torch.cuda.set_rng_state(random_state._cuda.cuda_rng_state)
-        else:
-            torch.set_rng_state(random_state._torch_rng_state)
+        os.environ["PYTHONHASHSEED"] = snapshot.environ
+        random.setstate(snapshot.python)
+        np.random.set_state(snapshot.numpy)
+        torch.set_rng_state(snapshot.torch_cpu)
+        torch.manual_seed(snapshot.torch_cpu_seed)
+        if snapshot.torch_cuda is not None and snapshot.torch_cuda_seed is not None:
+            torch.cuda.set_rng_state(snapshot.torch_cuda)
+            torch.cuda.manual_seed(snapshot.torch_cuda_seed)
+
+
+def setup_reproducibility(seed: int) -> None:
+    """
+    Configures the environment-level settings for deterministic behavior.
+
+    This function sets the `PYTHONHASHSEED` for consistent hash-based operations
+    and configures PyTorch's cuDNN backend to use deterministic algorithms.
+    Call this at the start of your script for a stable environment.
+
+    Args:
+        seed: The seed value to use for the hash seed.
+    """
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+@dataclass
+class RNGSuite:
+    """
+    A container for a suite of isolated random number generators.
+
+    This class holds independent, seeded generator objects for each library.
+    Using an `RNGSuite` instance allows for randomness control that is self-contained
+    and does not interfere with the global state, making it suitable for components or
+    libraries that need their own random stream.
+
+    Attributes:
+        python: An isolated `random.Random` generator.
+        numpy: An isolated `numpy.random.Generator` instance.
+        torch_cpu: A `torch.Generator` for CPU operations.
+        torch_cuda: A `torch.Generator` for CUDA operations, if available.
+    """
+
+    python: random.Random
+    numpy: np.random.Generator
+    torch_cpu: torch.Generator
+    torch_cuda: torch.Generator | None = None
+
+
+def create_rng_suite(seed: int) -> RNGSuite:
+    """
+    Creates a new suite of isolated random number generators from a single seed.
+
+    This is a convenience factory function to instantiate `RNGSuite` with all its
+    generators properly seeded and ready for use.
+
+    Args:
+        seed: The master seed to initialize all generators in the suite.
+
+    Returns:
+        A new `RNGSuite` instance.
+    """
+    python_rng = random.Random(seed)
+    numpy_rng = np.random.default_rng(seed)
+    torch_cpu_rng = torch.Generator(device="cpu").manual_seed(seed)
+
+    torch_cuda_rng = None
+    if torch.cuda.is_available():
+        torch_cuda_rng = torch.Generator("cuda").manual_seed(seed)
+
+    return RNGSuite(
+        python=python_rng,
+        numpy=numpy_rng,
+        torch_cpu=torch_cpu_rng,
+        torch_cuda=torch_cuda_rng,
+    )

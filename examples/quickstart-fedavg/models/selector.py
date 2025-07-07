@@ -6,17 +6,20 @@ from torchvision.models import resnet18
 
 
 class FedAvgModelSelector(ModelSelector):
-    def __init__(self, num_classes: int) -> None:
+    def __init__(self, num_classes: int, seed: int) -> None:
         self.num_classes = num_classes
+        self.seed = seed
 
     def select_model(self, model_name: str) -> nn.Module:
-        match model_name:
-            case "cnn":
-                return CNN(num_classes=self.num_classes)
-            case "resnet18":
-                return resnet18(num_classes=self.num_classes)
-            case _:
-                raise ValueError
+        with torch.random.fork_rng():
+            torch.manual_seed(self.seed)
+            match model_name:
+                case "cnn":
+                    return CNN(num_classes=self.num_classes)
+                case "resnet18":
+                    return resnet18(num_classes=self.num_classes)
+                case _:
+                    raise ValueError
 
 
 class CNN(nn.Module):

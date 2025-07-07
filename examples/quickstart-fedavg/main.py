@@ -11,7 +11,7 @@ from blazefl.contrib import (
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
 )
-from blazefl.utils import seed_everything
+from blazefl.utils.seed import setup_reproducibility
 from hydra.core import hydra_config
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -73,11 +73,11 @@ def main(cfg: DictConfig):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
+    # elif torch.backends.mps.is_available():
+    #     device = "mps"
     logging.info(f"device: {device}")
 
-    seed_everything(cfg.seed, device=device)
+    setup_reproducibility(cfg.seed)
 
     dataset = PartitionedCIFAR10(
         root=dataset_root_dir,
@@ -88,7 +88,7 @@ def main(cfg: DictConfig):
         num_shards=cfg.num_shards,
         dir_alpha=cfg.dir_alpha,
     )
-    model_selector = FedAvgModelSelector(num_classes=10)
+    model_selector = FedAvgModelSelector(num_classes=10, seed=cfg.seed)
 
     handler = FedAvgBaseServerHandler(
         model_selector=model_selector,
@@ -99,6 +99,7 @@ def main(cfg: DictConfig):
         device=device,
         sample_ratio=cfg.sample_ratio,
         batch_size=cfg.batch_size,
+        seed=cfg.seed,
     )
     trainer: (
         FedAvgBaseClientTrainer
@@ -117,6 +118,7 @@ def main(cfg: DictConfig):
                 epochs=cfg.epochs,
                 lr=cfg.lr,
                 batch_size=cfg.batch_size,
+                seed=cfg.seed,
             )
         case "multi-process":
             trainer = FedAvgProcessPoolClientTrainer(

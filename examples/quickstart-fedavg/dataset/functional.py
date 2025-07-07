@@ -27,11 +27,15 @@ def balance_split(num_clients: int, num_samples: int) -> npt.NDArray[np.int_]:
 
 
 def shards_partition(
-    targets, num_clients: int, num_shards: int
+    targets,
+    num_clients: int,
+    num_shards: int,
+    numpy_seed: int,
 ) -> dict[int, npt.NDArray[np.int_]]:
     """
     Adapted from https://github.com/SMILELab-FL/FedLab/blob/master/fedlab/utils/dataset/functional.py
     """
+    numpy_rng = np.random.default_rng(numpy_seed)
     if not isinstance(targets, np.ndarray):
         targets = np.array(targets)
     num_samples = targets.shape[0]
@@ -60,7 +64,7 @@ def shards_partition(
     sorted_indices = indices_targets[0, :]
 
     # permute shards idx, and slice shards_per_client shards for each client
-    rand_perm = np.random.permutation(num_shards)
+    rand_perm = numpy_rng.permutation(num_shards)
     num_client_shards = np.ones(num_clients) * shards_per_client
     # sample index must be int
     num_cumsum = np.cumsum(num_client_shards).astype(int)
@@ -86,15 +90,14 @@ def client_inner_dirichlet_partition_faster(
     num_classes: int,
     dir_alpha: float,
     client_sample_nums: npt.NDArray[np.int_],
+    numpy_seed: int,
     verbose: bool = True,
 ) -> dict[int, npt.NDArray[np.int_]]:
     """
     Adapted from https://github.com/SMILELab-FL/FedLab/blob/master/fedlab/utils/dataset/functional.py
     """
-    if not isinstance(targets, np.ndarray):
-        targets = np.array(targets)
-
-    class_priors = np.random.dirichlet(
+    numpy_rng = np.random.default_rng(numpy_seed)
+    class_priors = numpy_rng.dirichlet(
         alpha=[dir_alpha] * num_classes, size=num_clients
     )
     prior_cumsum = np.cumsum(class_priors, axis=1)
@@ -106,7 +109,7 @@ def client_inner_dirichlet_partition_faster(
     ]
 
     while np.sum(client_sample_nums) != 0:
-        curr_cid = np.random.randint(num_clients)
+        curr_cid = numpy_rng.integers(num_clients)
         # If current node is full resample a client
         if verbose:
             print(f"Remaining Data: {format(np.sum(client_sample_nums))}")
@@ -115,13 +118,13 @@ def client_inner_dirichlet_partition_faster(
         client_sample_nums[curr_cid] -= 1
         curr_prior = prior_cumsum[curr_cid]
         while True:
-            curr_class = int(np.argmax(np.random.uniform() <= curr_prior))
+            curr_class = np.int64(np.argmax(numpy_rng.uniform() <= curr_prior))
             # Redraw class label if no rest in current class samples
             if class_amount[curr_class] <= 0:
                 # Exception handling: If the current class has no samples left,
                 # randomly select a non-zero class
                 while True:
-                    new_class = np.random.randint(num_classes)
+                    new_class = numpy_rng.integers(num_classes)
                     if class_amount[new_class] > 0:
                         curr_class = new_class
                         break

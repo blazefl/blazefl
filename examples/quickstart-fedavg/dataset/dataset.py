@@ -5,7 +5,8 @@ import torch
 import torchvision
 from blazefl.contrib import FedAvgPartitionType
 from blazefl.core import PartitionedDataset
-from blazefl.utils import FilteredDataset
+from blazefl.utils import FilteredDataset, create_rng_suite
+from torch import Generator
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
@@ -14,6 +15,7 @@ from dataset.functional import (
     client_inner_dirichlet_partition_faster,
     shards_partition,
 )
+from dataset.transforms import GeneratorRandomCrop, GeneratorRandomHorizontalFlip
 
 
 class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
@@ -35,11 +37,15 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
         self.num_shards = num_shards
         self.dir_alpha = dir_alpha
 
+        self.rng_suite = create_rng_suite(seed)
+
         self.train_transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomCrop(32, padding=4),
+                GeneratorRandomHorizontalFlip(
+                    p=0.5, generator=self.rng_suite.torch_cpu
+                ),
+                GeneratorRandomCrop(32, padding=4, generator=self.rng_suite.torch_cpu),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
         )
@@ -78,6 +84,7 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
                     client_sample_nums=balance_split(
                         len(train_dataset.targets), self.num_clients
                     ),
+                    numpy_seed=self.seed,
                 )
             case "shards":
                 assert self.num_shards is not None
@@ -85,6 +92,7 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
                     targets=train_dataset.targets,
                     num_clients=self.num_clients,
                     num_shards=self.num_shards,
+                    numpy_seed=self.seed,
                 )
             case _:
                 raise ValueError(f"Invalid partition: {self.partition}")
@@ -122,11 +130,30 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
         assert isinstance(dataset, Dataset)
         return dataset
 
+    def set_dataset(
+        self, type_: FedAvgPartitionType, cid: int | None, dataset: Dataset
+    ) -> None:
+        match type_:
+            case FedAvgPartitionType.TRAIN:
+                torch.save(dataset, self.path.joinpath(type_, f"{cid}.pkl"))
+            case FedAvgPartitionType.TEST:
+                torch.save(dataset, self.path.joinpath(f"{type_}.pkl"))
+        assert isinstance(dataset, Dataset)
+
     def get_dataloader(
-        self, type_: FedAvgPartitionType, cid: int | None, batch_size: int | None = None
+        self,
+        type_: FedAvgPartitionType,
+        cid: int | None,
+        batch_size: int | None = None,
+        generator: Generator | None = None,
     ) -> DataLoader:
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        data_loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            generator=generator,
+        )
         return data_loader
