@@ -46,18 +46,14 @@ class RandomStateSnapshot:
         python: The internal state of Python's `random` module.
         numpy: The internal state of NumPy's legacy random number generator.
         torch_cpu: The RNG state of the PyTorch CPU generator.
-        torch_cpu_seed: The initial seed of the PyTorch CPU generator.
         torch_cuda: The RNG state of the PyTorch CUDA generator, if available.
-        torch_cuda_seed: The initial seed of the PyTorch CUDA generator, if available.
     """
 
     environ: str
     python: tuple[Any, ...]
     numpy: tuple[str, npt.NDArray[np.uint32], int, int, float]
     torch_cpu: torch.Tensor
-    torch_cpu_seed: int
     torch_cuda: torch.Tensor | None
-    torch_cuda_seed: int | None
 
     @classmethod
     def capture(cls) -> "RandomStateSnapshot":
@@ -72,14 +68,16 @@ class RandomStateSnapshot:
         _numpy = np.random.get_state(legacy=True)
         assert isinstance(_numpy, tuple)
         _torch_cpu = torch.get_rng_state()
-        _torch_cpu_seed = torch.initial_seed()
 
         snapshot = cls(
-            _environ, _python, _numpy, _torch_cpu, _torch_cpu_seed, None, None
+            environ=_environ,
+            python=_python,
+            numpy=_numpy,
+            torch_cpu=_torch_cpu,
+            torch_cuda=None,
         )
         if torch.cuda.is_available():
             snapshot.torch_cuda = torch.cuda.get_rng_state()
-            snapshot.torch_cuda_seed = torch.cuda.initial_seed()
         return snapshot
 
     @staticmethod
@@ -94,7 +92,5 @@ class RandomStateSnapshot:
         random.setstate(snapshot.python)
         np.random.set_state(snapshot.numpy)
         torch.set_rng_state(snapshot.torch_cpu)
-        torch.manual_seed(snapshot.torch_cpu_seed)
-        if snapshot.torch_cuda is not None and snapshot.torch_cuda_seed is not None:
+        if snapshot.torch_cuda is not None:
             torch.cuda.set_rng_state(snapshot.torch_cuda)
-            torch.cuda.manual_seed(snapshot.torch_cuda_seed)

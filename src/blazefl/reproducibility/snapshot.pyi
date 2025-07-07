@@ -13,9 +13,7 @@ class RandomStateSnapshot:
     python: tuple[Any, ...]
     numpy: tuple[str, npt.NDArray[np.uint32], int, int, float]
     torch_cpu: torch.Tensor
-    torch_cpu_seed: int
     torch_cuda: torch.Tensor | None
-    torch_cuda_seed: int | None
     @classmethod
     def capture(cls) -> RandomStateSnapshot: ...
     @staticmethod
