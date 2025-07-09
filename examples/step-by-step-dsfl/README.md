@@ -111,26 +111,29 @@ It lets you select different models on the fly for the server and clients.
 For instance:
 
 ```python
+from enum import StrEnum
 from blazefl.core import ModelSelector
 
-class DSFLModelSelector(ModelSelector):
+class DSFLModelName(StrEnum):
+    CNN = "cnn"
+    RESNET18 = "resnet18"
+
+class DSFLModelSelector(ModelSelector[DSFLModelName]):
     def __init__(self, num_classes: int, seed: int) -> None:
         self.num_classes = num_classes
         self.seed = seed
 
-    def select_model(self, model_name: str) -> nn.Module:
+    def select_model(self, model_name: DSFLModelName) -> nn.Module:
         with torch.random.fork_rng():
             torch.manual_seed(self.seed)
             match model_name:
-                case "cnn":
+                case DSFLModelName.CNN:
                     return CNN(num_classes=self.num_classes)
-                case "resnet18":
+                case DSFLModelName.RESNET18:
                     return resnet18(num_classes=self.num_classes)
-                case _:
-                    raise ValueError(f"Invalid model name: {model_name}")
 ```
 
-Here, `select_model` simply takes a string (the model name) and returns the corresponding `nn.Module`.
+Here, we define model names using `StrEnum` for better type safety. The `select_model` method then takes a `DSFLModelName` and returns the corresponding `nn.Module`.
 You can store useful information (like the number of classes) as attributes in your `ModelSelector`.
 
 The full source code can be found [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/models).
