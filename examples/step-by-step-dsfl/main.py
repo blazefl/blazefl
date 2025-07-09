@@ -5,7 +5,7 @@ from pathlib import Path
 import hydra
 import torch
 import torch.multiprocessing as mp
-from blazefl.utils import seed_everything
+from blazefl.reproducibility import setup_reproducibility
 from hydra.core import hydra_config
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -67,7 +67,7 @@ def main(
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    seed_everything(cfg.seed, device=device)
+    setup_reproducibility(cfg.seed)
 
     dataset = DSFLPartitionedDataset(
         root=dataset_root_dir,
@@ -78,7 +78,7 @@ def main(
         partition=cfg.partition,
         open_size=cfg.algorithm.open_size,
     )
-    model_selector = DSFLModelSelector(num_classes=10)
+    model_selector = DSFLModelSelector(num_classes=10, seed=cfg.seed)
 
     match cfg.algorithm.name:
         case "dsfl":
@@ -95,6 +95,7 @@ def main(
                 open_size_per_round=cfg.algorithm.open_size_per_round,
                 device=device,
                 sample_ratio=cfg.sample_ratio,
+                seed=cfg.seed,
             )
             trainer = DSFLProcessPoolClientTrainer(
                 model_selector=model_selector,

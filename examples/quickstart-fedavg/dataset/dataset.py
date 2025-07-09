@@ -138,7 +138,6 @@ class PartitionedCIFAR10(PartitionedDataset[FedAvgPartitionType]):
                 torch.save(dataset, self.path.joinpath(type_, f"{cid}.pkl"))
             case FedAvgPartitionType.TEST:
                 torch.save(dataset, self.path.joinpath(f"{type_}.pkl"))
-        assert isinstance(dataset, Dataset)
 
     def get_dataloader(
         self,

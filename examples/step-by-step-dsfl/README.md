@@ -21,7 +21,7 @@ cd step-by-step-dsfl
 Next, Initialize the project with [uv](https://github.com/astral-sh/uv) (or any other package manager of your choice).
 
 ```bash
-uv init --python 3.12
+uv init --python 3.13
 ```
 
 Then, create a virtual environment and install BlazeFL. 
@@ -43,22 +43,27 @@ For example, you can implement `DSFLPartitionedDataset` like this:
 ```python
 from blazefl.core import PartitionedDataset
 
-class DSFLPartitionedDataset(PartitionedDataset):
+class DSFLPartitionType(StrEnum):
+    TRAIN = "train"
+    OPEN = "open"
+    TEST = "test"
+
+class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
     # Omited for brevity
 
-    def get_dataset(self, type_: str, cid: int | None) -> Dataset:
+    def get_dataset(self, type_: DSFLPartitionType, cid: int | None) -> Dataset:
         match type_:
-            case "train":
+            case DSFLPartitionType.TRAIN:
                 dataset = torch.load(
                     self.path.joinpath(type_, f"{cid}.pkl"),
                     weights_only=False,
                 )
-            case "open":
+            case DSFLPartitionType.OPEN:
                 dataset = torch.load(
                     self.path.joinpath(f"{type_}.pkl"),
                     weights_only=False,
                 )
-            case "test":
+            case DSFLPartitionType.TEST:
                 if cid is not None:
                     dataset = torch.load(
                         self.path.joinpath(type_, f"{cid}.pkl"),
@@ -68,18 +73,25 @@ class DSFLPartitionedDataset(PartitionedDataset):
                     dataset = torch.load(
                         self.path.joinpath(type_, "default.pkl"), weights_only=False
                     )
-            case _:
-                raise ValueError(f"Invalid dataset type: {type_}")
         assert isinstance(dataset, Dataset)
         return dataset
 
     def get_dataloader(
-        self, type_: str, cid: int | None, batch_size: int | None = None
+        self,
+        type_: DSFLPartitionType,
+        cid: int | None,
+        batch_size: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> DataLoader:
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        data_loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=type_ == DSFLPartitionType.TRAIN,
+            generator=generator,
+        )
         return data_loader
 ```
 
@@ -102,17 +114,20 @@ For instance:
 from blazefl.core import ModelSelector
 
 class DSFLModelSelector(ModelSelector):
-    def __init__(self, num_classes: int) -> None:
+    def __init__(self, num_classes: int, seed: int) -> None:
         self.num_classes = num_classes
+        self.seed = seed
 
     def select_model(self, model_name: str) -> nn.Module:
-        match model_name:
-            case "cnn":
-                return CNN(num_classes=self.num_classes)
-            case "resnet18":
-                return resnet18(num_classes=self.num_classes)
-            case _:
-                raise ValueError(f"Invalid model name: {model_name}")
+        with torch.random.fork_rng():
+            torch.manual_seed(self.seed)
+            match model_name:
+                case "cnn":
+                    return CNN(num_classes=self.num_classes)
+                case "resnet18":
+                    return resnet18(num_classes=self.num_classes)
+                case _:
+                    raise ValueError(f"Invalid model name: {model_name}")
 ```
 
 Here, `select_model` simply takes a string (the model name) and returns the corresponding `nn.Module`.
@@ -130,6 +145,7 @@ In DS-FL, you could define them like this:
 ```python
 @dataclass
 class DSFLUplinkPackage:
+    cid: int
     soft_labels: torch.Tensor
     indices: torch.Tensor
     metadata: dict
@@ -149,16 +165,16 @@ Including explicit types for each attribute also improves IDE support for debugg
 
 The server in an FL setup typically handles aggregating information from clients and updating the global model.
 BlazeFL does not force any specific "aggregation" or "update" strategy.
-Instead, it provides a flexible `ServerHandler` class that focuses on the necessary client-server communication.
+Instead, it provides a flexible `BaseServerHandler` class that focuses on the necessary client-server communication.
 
 Below is an example for DS-FL:
 
 ```python
-class DSFLServerHandler(ServerHandler[DSFLUplinkPackage, DSFLDownlinkPackage]):
+class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPackage]):
     # Omitted for brevity
 
     def sample_clients(self) -> list[int]:
-        sampled_clients = random.sample(
+        sampled_clients = self.rng_suite.python.sample(
             range(self.num_clients), self.num_clients_per_round
         )
 
@@ -179,6 +195,7 @@ class DSFLServerHandler(ServerHandler[DSFLUplinkPackage, DSFLDownlinkPackage]):
             return False
 
     def global_update(self, buffer) -> None:
+        buffer.sort(key=lambda x: x.cid)
         soft_labels_list = [ele.soft_labels for ele in buffer]
         indices_list = [ele.indices for ele in buffer]
         self.metadata_list = [ele.metadata for ele in buffer]
@@ -192,27 +209,34 @@ class DSFLServerHandler(ServerHandler[DSFLUplinkPackage, DSFLDownlinkPackage]):
 
         global_soft_labels: list[torch.Tensor] = []
         global_indices: list[int] = []
-        for indices, soft_labels in soft_labels_stack.items():
+        for indices, soft_labels in sorted(
+            soft_labels_stack.items(), key=lambda x: x[0]
+        ):
             global_indices.append(indices)
             mean_soft_labels = torch.mean(torch.stack(soft_labels), dim=0)
             # Entropy Reduction Aggregation (ERA)
             era_soft_labels = F.softmax(mean_soft_labels / self.era_temperature, dim=0)
             global_soft_labels.append(era_soft_labels)
 
-        DSFLServerHandler.distill(
+        open_dataset = self.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
+        open_loader = DataLoader(
+            Subset(open_dataset, global_indices),
+            batch_size=self.kd_batch_size,
+        )
+        DSFLBaseServerHandler.distill(
             self.model,
             self.kd_optimizer,
-            self.dataset,
+            open_loader,
             global_soft_labels,
-            global_indices,
             self.kd_epochs,
             self.kd_batch_size,
             self.device,
+            stop_event=None,
         )
 
         self.global_soft_labels = torch.stack(global_soft_labels)
-        self.global_indices = torch.tensor(global_indices)
-    
+        self.global_indices = torch.tensor(global_indices) 
+
     # Omited for brevity
 
     def downlink_package(self) -> DSFLDownlinkPackage:
@@ -222,7 +246,7 @@ class DSFLServerHandler(ServerHandler[DSFLUplinkPackage, DSFLDownlinkPackage]):
         )
 ```
 
-The `ServerHandler` class requires five core methods to be implemented:
+The `BaseServerHandler` class requires five core methods to be implemented:
 
 - `sample_clients`
 - `if_stop`
@@ -234,123 +258,147 @@ If any of these methods are not needed for your approach, you can simply impleme
 
 In DS-FL, the `global_update` method aggregates the soft labels from clients and distills them into a global model.
 However, you have the flexibility to place any custom operations in these or other methods.
-You can find more details in the [official documentation](https://kitsuyaazuma.github.io/blazefl/generated/blazefl.core.ServerHandler.html#blazefl.core.ServerHandler).
+You can find more details in the [official documentation](https://kitsuyaazuma.github.io/blazefl/generated/blazefl.core.BaseServerHandler.html#blazefl.core.BaseServerHandler).
 
 
-## Implementing a ParallelClientTrainer
+## Implementing a ProcessPoolClientTrainer
 
 Traditional FL frameworks often train each client sequentially and upload parameters to the server.
-With BlazeFL, the `ParallelClientTrainer` class lets you train multiple clients in parallel while retaining full extensibility.
+With BlazeFL, the `ProcessPoolClientTrainer` class lets you train multiple clients in parallel while retaining full extensibility.
 
 An example DS-FL client trainer looks like this:
 
 ```python
 @dataclass
-class DSFLDiskSharedData:
+class DSFLClientConfig:
     # Omitted for brevity
 
-class DSFLParallelClientTrainer(
-    ParallelClientTrainer[DSFLUplinkPackage, DSFLDownlinkPackage, DSFLDiskSharedData]
+@dataclass
+class DSFLClientState:
+    random: RNGSuite
+    model: dict[str, torch.Tensor]
+    optimizer: dict[str, torch.Tensor]
+    kd_optimizer: dict[str, torch.Tensor] | None
+
+
+class DSFLProcessPoolClientTrainer(
+    ProcessPoolClientTrainer[DSFLUplinkPackage, DSFLDownlinkPackage, DSFLClientConfig]
 ):
     # Omitted for brevity
 
     @staticmethod
-    def process_client(path: Path) -> Path:
-        data = torch.load(path, weights_only=False)
-        assert isinstance(data, DSFLDiskSharedData)
+    def worker(
+        config: DSFLClientConfig | Path,
+        payload: DSFLDownlinkPackage | Path,
+        device: str,
+        stop_event: threading.Event,
+    ) -> Path:
+        assert isinstance(config, Path) and isinstance(payload, Path)
+        config_path, payload_path = config, payload
+        c = torch.load(config_path, weights_only=False)
+        p = torch.load(payload_path, weights_only=False)
+        assert isinstance(c, DSFLClientConfig) and isinstance(p, DSFLDownlinkPackage)
 
-        model = data.model_selector.select_model(data.model_name)
-        optimizer = torch.optim.SGD(model.parameters(), lr=data.lr)
+        setup_reproducibility(c.seed)
+
+        model = c.model_selector.select_model(c.model_name)
+        optimizer = torch.optim.SGD(model.parameters(), lr=c.lr)
         kd_optimizer: torch.optim.SGD | None = None
 
         state: DSFLClientState | None = None
-        if data.state_path.exists():
-            state = torch.load(data.state_path, weights_only=False)
+        if c.state_path.exists():
+            state = torch.load(c.state_path, weights_only=False)
             assert isinstance(state, DSFLClientState)
-            RandomState.set_random_state(state.random)
+            rng_suite = state.random
             model.load_state_dict(state.model)
             optimizer.load_state_dict(state.optimizer)
             if state.kd_optimizer is not None:
-                kd_optimizer = torch.optim.SGD(model.parameters(), lr=data.kd_lr)
+                kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
                 kd_optimizer.load_state_dict(state.kd_optimizer)
         else:
-            seed_everything(data.seed, device=device)
+            rng_suite = create_rng_suite(c.seed)
 
         # Distill
-        open_dataset = data.dataset.get_dataset(type_="open", cid=None)
-        if data.payload.indices is not None and data.payload.soft_labels is not None:
-            global_soft_labels = list(torch.unbind(data.payload.soft_labels, dim=0))
-            global_indices = data.payload.indices.tolist()
+        open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
+        if p.indices is not None and p.soft_labels is not None:
+            global_soft_labels = list(torch.unbind(p.soft_labels, dim=0))
+            global_indices = p.indices.tolist()
             if kd_optimizer is None:
-                kd_optimizer = torch.optim.SGD(model.parameters(), lr=data.kd_lr)
-            DSFLServerHandler.distill(
+                kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
+
+            open_loader = DataLoader(
+                Subset(open_dataset, global_indices),
+                batch_size=c.kd_batch_size,
+            )
+            DSFLBaseServerHandler.distill(
                 model=model,
-                dataset=data.dataset,
+                optimizer=kd_optimizer,
+                open_loader=open_loader,
                 global_soft_labels=global_soft_labels,
-                global_indices=global_indices,
-                kd_epochs=data.kd_epochs,
-                kd_batch_size=data.kd_batch_size,
-                kd_lr=data.kd_lr,
-                device=data.device,
+                kd_epochs=c.kd_epochs,
+                kd_batch_size=c.kd_batch_size,
+                device=device,
+                stop_event=stop_event,
             )
 
         # Train
-        train_loader = data.dataset.get_dataloader(
-            type_="train",
-            cid=data.cid,
-            batch_size=data.batch_size,
+        train_loader = c.dataset.get_dataloader(
+            type_=DSFLPartitionType.TRAIN,
+            cid=c.cid,
+            batch_size=c.batch_size,
+            generator=rng_suite.torch_cpu,
         )
-        DSFLParallelClientTrainer.train(
+        DSFLProcessPoolClientTrainer.train(
             model=model,
+            optimizer=optimizer,
             train_loader=train_loader,
-            device=data.device,
-            epochs=data.epochs,
-            lr=data.lr,
+            device=device,
+            epochs=c.epochs,
+            stop_event=stop_event,
         )
 
         # Predict
         open_loader = DataLoader(
-            Subset(open_dataset, data.payload.next_indices.tolist()),
-            batch_size=data.batch_size,
+            Subset(open_dataset, p.next_indices.tolist()),
+            batch_size=c.batch_size,
         )
-        soft_labels = DSFLParallelClientTrainer.predict(
+        soft_labels = DSFLProcessPoolClientTrainer.predict(
             model=model,
             open_loader=open_loader,
-            device=data.device,
+            device=device,
         )
 
         # Evaluate
-        test_loader = data.dataset.get_dataloader(
-            type_="val",
-            cid=data.cid,
-            batch_size=data.batch_size,
+        test_loader = c.dataset.get_dataloader(
+            type_=DSFLPartitionType.TEST,
+            cid=c.cid,
+            batch_size=c.batch_size,
         )
-        loss, acc = DSFLServerHandler.evaluate(
+        loss, acc = DSFLBaseServerHandler.evaulate(
             model=model,
             test_loader=test_loader,
-            device=data.device,
+            device=device,
         )
 
         package = DSFLUplinkPackage(
+            cid=c.cid,
             soft_labels=soft_labels,
-            indices=data.payload.next_indices,
+            indices=p.next_indices,
             metadata={"loss": loss, "acc": acc},
         )
 
-        torch.save(package, path)
+        torch.save(package, config_path)
         state = DSFLClientState(
-            random=RandomState.get_random_state(device=data.device),
+            random=rng_suite,
             model=model.state_dict(),
             optimizer=optimizer.state_dict(),
             kd_optimizer=kd_optimizer.state_dict() if kd_optimizer else None,
         )
-        torch.save(state, data.state_path)
-        return path
+        torch.save(state, c.state_path)
+        return config_path
 
-    def get_shared_data(
-        self, cid: int, payload: DSFLDownlinkPackage
-    ) -> DSFLDiskSharedData:
-        data = DSFLDiskSharedData(
+    def get_client_config(self, cid: int) -> DSFLClientConfig:
+        data = DSFLClientConfig(
             model_selector=self.model_selector,
             model_name=self.model_name,
             dataset=self.dataset,
@@ -362,22 +410,21 @@ class DSFLParallelClientTrainer(
             kd_lr=self.kd_lr,
             cid=cid,
             seed=self.seed,
-            payload=payload,
             state_path=self.state_dir.joinpath(f"{cid}.pt"),
         )
         return data
 
     def uplink_package(self) -> list[DSFLUplinkPackage]:
         package = deepcopy(self.cache)
-        self.cache: list[DSFLUplinkPackage] = []
+        self.cache = []
         return package
 ```
 
 This class uses Python’s standard library multiprocessing (wrapped under BlazeFL) to train clients concurrently.
 You mainly need to implement:
 
-- `process_client` (a static method called by child processes)
-- `get_shared_data` (to prepare the data shared across processes)
+- `worker` (a static method called by child processes)
+- `get_client_config` (to prepare the config shared across processes)
 - `uplink_package` (to send final results back to the server)
 
 By storing shared data on disk instead of passing it directly, you avoid complex shared memory management.
@@ -394,8 +441,8 @@ Here’s an example DS-FL pipeline:
 class DSFLPipeline:
     def __init__(
         self,
-        handler: DSFLServerHandler,
-        trainer: DSFLParallelClientTrainer,
+        handler: DSFLBaseServerHandler,
+        trainer: DSFLProcessPoolClientTrainer,
         writer: SummaryWriter,
     ) -> None:
         self.handler = handler
@@ -420,16 +467,17 @@ class DSFLPipeline:
             summary = self.handler.get_summary()
             for key, value in summary.items():
                 self.writer.add_scalar(key, value, round_)
-            logging.info(f"Round {round_}: {summary}")
+            formatted_summary = ", ".join(f"{k}: {v:.3f}" for k, v in summary.items())
+            logging.info(f"round: {round_}, {formatted_summary}")
 
-        logging.info("Done!")
+        logging.info("done!")
 ```
 
 This pipeline is almost identical to one you might create for FedAvg or another standard FL method, showcasing how reusable these components are. 
 
 In this snippet, we use TensorBoard via SummaryWriter for logging, but you’re free to use alternatives like [W&B](https://github.com/wandb/wandb).
 
-You can see the full source code [here](https://github.com/kitsuyaazuma/BlazeFL/tree/main/examples/step-by-step-dsfl/main.py).
+You can see the full source code [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/main.py).
 
 ## Running the Simulation
 
