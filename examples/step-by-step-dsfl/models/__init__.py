@@ -1,3 +1,3 @@
-from models.selector import DSFLModelSelector
+from models.selector import DSFLModelName, DSFLModelSelector
 
-__all__ = ["DSFLModelSelector"]
+__all__ = ["DSFLModelSelector", "DSFLModelName"]

@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from dataset import DSFLPartitionedDataset, DSFLPartitionType
-from models import DSFLModelSelector
+from models import DSFLModelName, DSFLModelSelector
 
 
 @dataclass
@@ -41,7 +41,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
     def __init__(
         self,
         model_selector: DSFLModelSelector,
-        model_name: str,
+        model_name: DSFLModelName,
         dataset: DSFLPartitionedDataset,
         global_round: int,
         num_clients: int,
@@ -248,7 +248,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
 @dataclass
 class DSFLClientConfig:
     model_selector: DSFLModelSelector
-    model_name: str
+    model_name: DSFLModelName
     dataset: DSFLPartitionedDataset
     epochs: int
     batch_size: int
@@ -275,7 +275,7 @@ class DSFLProcessPoolClientTrainer(
     def __init__(
         self,
         model_selector: DSFLModelSelector,
-        model_name: str,
+        model_name: DSFLModelName,
         share_dir: Path,
         state_dir: Path,
         dataset: DSFLPartitionedDataset,
