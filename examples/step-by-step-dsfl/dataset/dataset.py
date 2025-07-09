@@ -5,15 +5,12 @@ from pathlib import Path
 import numpy as np
 import torch
 import torchvision
-from blazefl.core import PartitionedDataset
-from blazefl.utils import FilteredDataset
+from blazefl.core import FilteredDataset, PartitionedDataset
+from blazefl.reproducibility import create_rng_suite
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from dataset.functional import (
-    balance_split,
-    client_inner_dirichlet_partition_faster,
-)
+from .functional import balance_split, client_inner_dirichlet_partition_faster
 
 
 class DSFLPartitionType(StrEnum):
@@ -41,11 +38,11 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
         self.dir_alpha = dir_alpha
         self.open_size = open_size
 
+        self.rng_suite = create_rng_suite(seed)
+
         self.train_transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.RandomHorizontalFlip(p=0.5),
-                transforms.RandomCrop(32, padding=4),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
         )
@@ -90,6 +87,7 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
                         num_samples=len(train_dataset.targets),
                     ),
                     verbose=False,
+                    numpy_rng=self.rng_suite.numpy,
                 )
                 test_client_dict, _ = client_inner_dirichlet_partition_faster(
                     targets=test_dataset.targets,
@@ -102,6 +100,7 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
                     ),
                     class_priors=class_priors,
                     verbose=False,
+                    numpy_rng=self.rng_suite.numpy,
                 )
             case _:
                 raise ValueError(f"Invalid partition: {self.partition}")
@@ -173,11 +172,31 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
         assert isinstance(dataset, Dataset)
         return dataset
 
+    def set_dataset(
+        self, type_: DSFLPartitionType, cid: int | None, dataset: Dataset
+    ) -> None:
+        match type_:
+            case DSFLPartitionType.TRAIN:
+                torch.save(dataset, self.path.joinpath(type_, f"{cid}.pkl"))
+            case DSFLPartitionType.OPEN:
+                torch.save(dataset, self.path.joinpath(f"{type_}.pkl"))
+            case DSFLPartitionType.TEST:
+                if cid is not None:
+                    torch.save(dataset, self.path.joinpath(type_, f"{cid}.pkl"))
+                else:
+                    torch.save(dataset, self.path.joinpath(type_, "default.pkl"))
+
     def get_dataloader(
-        self, type_: DSFLPartitionType, cid: int | None, batch_size: int | None = None
+        self,
+        type_: DSFLPartitionType,
+        cid: int | None,
+        batch_size: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> DataLoader:
         dataset = self.get_dataset(type_, cid)
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        data_loader = DataLoader(
+            dataset, batch_size=batch_size, shuffle=True, generator=generator
+        )
         return data_loader

@@ -19,15 +19,18 @@ def client_inner_dirichlet_partition_faster(
     client_sample_nums: npt.NDArray[np.int_],
     class_priors: npt.NDArray[np.float64] | None = None,
     verbose: bool = True,
+    numpy_rng: np.random.Generator | None = None,
 ) -> tuple[dict[int, npt.NDArray[np.int_]], npt.NDArray[np.float64]]:
     """
     Adapted from https://github.com/SMILELab-FL/FedLab/blob/master/fedlab/utils/dataset/functional.py
     """
+    if numpy_rng is None:
+        numpy_rng = np.random.default_rng()
     if not isinstance(targets, np.ndarray):
         targets = np.array(targets)
 
     if class_priors is None:  # CHANGED: use given class_priors if provided
-        class_priors = np.random.dirichlet(
+        class_priors = numpy_rng.dirichlet(
             alpha=[dir_alpha] * num_classes, size=num_clients
         )
     prior_cumsum = np.cumsum(class_priors, axis=1)
@@ -39,7 +42,7 @@ def client_inner_dirichlet_partition_faster(
     ]
 
     while np.sum(client_sample_nums) != 0:
-        curr_cid = np.random.randint(num_clients)
+        curr_cid = numpy_rng.integers(num_clients)
         # If current node is full resample a client
         if verbose:
             print(f"Remaining Data: {np.sum(client_sample_nums)}")
@@ -48,13 +51,13 @@ def client_inner_dirichlet_partition_faster(
         client_sample_nums[curr_cid] -= 1
         curr_prior = prior_cumsum[curr_cid]
         while True:
-            curr_class = int(np.argmax(np.random.uniform() <= curr_prior))
+            curr_class = np.int64(np.argmax(numpy_rng.uniform() <= curr_prior))
             # Redraw class label if no rest in current class samples
             if class_amount[curr_class] <= 0:
                 # Exception handling: If the current class has no samples left,
                 # randomly select a non-zero class
                 while True:
-                    new_class = np.random.randint(num_classes)
+                    new_class = numpy_rng.integers(num_classes)
                     if class_amount[new_class] > 0:
                         curr_class = new_class
                         break

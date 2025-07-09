@@ -1,4 +1,3 @@
-import random
 import threading
 from collections import defaultdict
 from collections.abc import Iterable
@@ -12,13 +11,10 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from blazefl.core import (
     BaseServerHandler,
+    FilteredDataset,
     ProcessPoolClientTrainer,
 )
-from blazefl.utils import (
-    FilteredDataset,
-    RandomState,
-    seed_everything,
-)
+from blazefl.reproducibility import RNGSuite, create_rng_suite, setup_reproducibility
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
@@ -28,6 +24,7 @@ from models import DSFLModelSelector
 
 @dataclass
 class DSFLUplinkPackage:
+    cid: int
     soft_labels: torch.Tensor
     indices: torch.Tensor
     metadata: dict
@@ -55,6 +52,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         kd_lr: float,
         era_temperature: float,
         open_size_per_round: int,
+        seed: int,
     ) -> None:
         self.model = model_selector.select_model(model_name)
         self.dataset = dataset
@@ -67,6 +65,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         self.kd_lr = kd_lr
         self.era_temperature = era_temperature
         self.open_size_per_round = open_size_per_round
+        self.seed = seed
 
         self.kd_optimizer = torch.optim.SGD(self.model.parameters(), lr=kd_lr)
         self.client_buffer_cache: list[DSFLUplinkPackage] = []
@@ -75,15 +74,19 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         self.num_clients_per_round = int(self.num_clients * self.sample_ratio)
         self.round = 0
 
+        self.rng_suite = create_rng_suite(seed)
+
     def sample_clients(self) -> list[int]:
-        sampled_clients = random.sample(
+        sampled_clients = self.rng_suite.python.sample(
             range(self.num_clients), self.num_clients_per_round
         )
 
         return sorted(sampled_clients)
 
     def get_next_indices(self) -> torch.Tensor:
-        shuffled_indices = torch.randperm(self.dataset.open_size)
+        shuffled_indices = torch.randperm(
+            self.dataset.open_size, generator=self.rng_suite.torch_cpu
+        )
         return shuffled_indices[: self.open_size_per_round]
 
     def if_stop(self) -> bool:
@@ -101,6 +104,7 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
             return False
 
     def global_update(self, buffer) -> None:
+        buffer.sort(key=lambda x: x.cid)
         soft_labels_list = [ele.soft_labels for ele in buffer]
         indices_list = [ele.indices for ele in buffer]
         self.metadata_list = [ele.metadata for ele in buffer]
@@ -121,12 +125,17 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
             era_soft_labels = F.softmax(mean_soft_labels / self.era_temperature, dim=0)
             global_soft_labels.append(era_soft_labels)
 
+        open_dataset = self.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
+        open_loader = DataLoader(
+            Subset(open_dataset, global_indices),
+            batch_size=self.kd_batch_size,
+            generator=self.rng_suite.torch_cpu,
+        )
         DSFLBaseServerHandler.distill(
             self.model,
             self.kd_optimizer,
-            self.dataset,
+            open_loader,
             global_soft_labels,
-            global_indices,
             self.kd_epochs,
             self.kd_batch_size,
             self.device,
@@ -140,9 +149,8 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
     def distill(
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        dataset: DSFLPartitionedDataset,
+        open_loader: DataLoader,
         global_soft_labels: list[torch.Tensor],
-        global_indices: list[int],
         kd_epochs: int,
         kd_batch_size: int,
         device: str,
@@ -150,11 +158,6 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
     ) -> None:
         model.to(device)
         model.train()
-        open_dataset = dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
-        open_loader = DataLoader(
-            Subset(open_dataset, global_indices),
-            batch_size=kd_batch_size,
-        )
         global_soft_label_loader = DataLoader(
             FilteredDataset(
                 indices=list(range(len(global_soft_labels))),
@@ -259,7 +262,7 @@ class DSFLClientConfig:
 
 @dataclass
 class DSFLClientState:
-    random: RandomState
+    random: RNGSuite
     model: dict[str, torch.Tensor]
     optimizer: dict[str, torch.Tensor]
     kd_optimizer: dict[str, torch.Tensor] | None
@@ -334,6 +337,8 @@ class DSFLProcessPoolClientTrainer(
         p = torch.load(payload_path, weights_only=False)
         assert isinstance(c, DSFLClientConfig) and isinstance(p, DSFLDownlinkPackage)
 
+        setup_reproducibility(c.seed)
+
         model = c.model_selector.select_model(c.model_name)
         optimizer = torch.optim.SGD(model.parameters(), lr=c.lr)
         kd_optimizer: torch.optim.SGD | None = None
@@ -342,14 +347,14 @@ class DSFLProcessPoolClientTrainer(
         if c.state_path.exists():
             state = torch.load(c.state_path, weights_only=False)
             assert isinstance(state, DSFLClientState)
-            RandomState.set_random_state(state.random)
+            rng_suite = state.random
             model.load_state_dict(state.model)
             optimizer.load_state_dict(state.optimizer)
             if state.kd_optimizer is not None:
                 kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
                 kd_optimizer.load_state_dict(state.kd_optimizer)
         else:
-            seed_everything(c.seed, device=device)
+            rng_suite = create_rng_suite(c.seed)
 
         # Distill
         open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
@@ -358,12 +363,18 @@ class DSFLProcessPoolClientTrainer(
             global_indices = p.indices.tolist()
             if kd_optimizer is None:
                 kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
+
+            open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
+            open_loader = DataLoader(
+                Subset(open_dataset, global_indices),
+                batch_size=c.kd_batch_size,
+                generator=rng_suite.torch_cpu,
+            )
             DSFLBaseServerHandler.distill(
                 model=model,
                 optimizer=kd_optimizer,
-                dataset=c.dataset,
+                open_loader=open_loader,
                 global_soft_labels=global_soft_labels,
-                global_indices=global_indices,
                 kd_epochs=c.kd_epochs,
                 kd_batch_size=c.kd_batch_size,
                 device=device,
@@ -375,6 +386,7 @@ class DSFLProcessPoolClientTrainer(
             type_=DSFLPartitionType.TRAIN,
             cid=c.cid,
             batch_size=c.batch_size,
+            generator=rng_suite.torch_cpu,
         )
         DSFLProcessPoolClientTrainer.train(
             model=model,
@@ -384,11 +396,15 @@ class DSFLProcessPoolClientTrainer(
             epochs=c.epochs,
             stop_event=stop_event,
         )
+        c.dataset.set_dataset(
+            dataset=train_loader.dataset, type_=DSFLPartitionType.TRAIN, cid=c.cid
+        )
 
         # Predict
         open_loader = DataLoader(
             Subset(open_dataset, p.next_indices.tolist()),
             batch_size=c.batch_size,
+            generator=rng_suite.torch_cpu,
         )
         soft_labels = DSFLProcessPoolClientTrainer.predict(
             model=model,
@@ -409,6 +425,7 @@ class DSFLProcessPoolClientTrainer(
         )
 
         package = DSFLUplinkPackage(
+            cid=c.cid,
             soft_labels=soft_labels,
             indices=p.next_indices,
             metadata={"loss": loss, "acc": acc},
@@ -416,7 +433,7 @@ class DSFLProcessPoolClientTrainer(
 
         torch.save(package, config_path)
         state = DSFLClientState(
-            random=RandomState.get_random_state(device=device),
+            random=rng_suite,
             model=model.state_dict(),
             optimizer=optimizer.state_dict(),
             kd_optimizer=kd_optimizer.state_dict() if kd_optimizer else None,
