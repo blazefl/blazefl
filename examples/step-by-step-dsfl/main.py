@@ -13,6 +13,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from algorithm import DSFLBaseServerHandler, DSFLProcessPoolClientTrainer
 from dataset import DSFLPartitionedDataset
 from models import DSFLModelSelector
+from models.selector import DSFLModelName
 
 
 class DSFLPipeline:
@@ -82,9 +83,10 @@ def main(
 
     match cfg.algorithm.name:
         case "dsfl":
+            model_name = DSFLModelName(cfg.model_name)
             handler = DSFLBaseServerHandler(
                 model_selector=model_selector,
-                model_name=cfg.model_name,
+                model_name=model_name,
                 dataset=dataset,
                 global_round=cfg.global_round,
                 num_clients=cfg.num_clients,
@@ -99,7 +101,7 @@ def main(
             )
             trainer = DSFLProcessPoolClientTrainer(
                 model_selector=model_selector,
-                model_name=cfg.model_name,
+                model_name=model_name,
                 dataset=dataset,
                 share_dir=share_dir,
                 state_dir=state_dir,

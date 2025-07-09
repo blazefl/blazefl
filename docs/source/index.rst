@@ -1,4 +1,4 @@
-.. image:: _static/logo.png
+.. image:: _static/logo.svg
    :align: center
    :width: 80%
    :class: dark-light

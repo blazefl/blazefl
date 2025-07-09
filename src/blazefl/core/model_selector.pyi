@@ -1,5 +1,8 @@
 import torch
-from typing import Protocol
+from enum import StrEnum
+from typing import Protocol, TypeVar
 
-class ModelSelector(Protocol):
-    def select_model(self, model_name: str) -> torch.nn.Module: ...
+ModelName = TypeVar('ModelName', bound=StrEnum, contravariant=True)
+
+class ModelSelector(Protocol[ModelName]):
+    def select_model(self, model_name: ModelName) -> torch.nn.Module: ...
