@@ -2,6 +2,7 @@ import os
 import signal
 import time
 from contextlib import suppress
+from enum import StrEnum
 
 import psutil
 import pytest
@@ -19,10 +20,15 @@ from src.blazefl.contrib.fedavg import (
 from src.blazefl.core import ModelSelector, PartitionedDataset
 
 
-class DummyModelSelector(ModelSelector):
-    def select_model(self, model_name: str) -> torch.nn.Module:
-        _ = model_name
-        return torch.nn.Sequential(torch.nn.Flatten(), torch.nn.Linear(4, 2))
+class DummyModelName(StrEnum):
+    DUMMY = "dummy"
+
+
+class DummyModelSelector(ModelSelector[DummyModelName]):
+    def select_model(self, model_name: DummyModelName) -> torch.nn.Module:
+        match model_name:
+            case DummyModelName.DUMMY:
+                return torch.nn.Sequential(torch.nn.Flatten(), torch.nn.Linear(4, 2))
 
 
 class DummyDataset(Dataset):
@@ -37,7 +43,12 @@ class DummyDataset(Dataset):
         return self.data[index], self.targets[index]
 
 
-class DummyPartitionedDataset(PartitionedDataset):
+class DummyDataType(StrEnum):
+    TRAIN = "train"
+    TEST = "test"
+
+
+class DummyPartitionedDataset(PartitionedDataset[DummyDataType]):
     def __init__(self, num_clients: int, size_per_client: int):
         self.num_clients = num_clients
         self.datasets = []
@@ -48,15 +59,16 @@ class DummyPartitionedDataset(PartitionedDataset):
             dataset = torch.utils.data.TensorDataset(data, targets)
             self.datasets.append(dataset)
 
-    def get_dataset(self, type_: str, cid: int | None):
-        _ = type_
-        if cid is None:
-            cid = 0
-        return self.datasets[cid]
+    def get_dataset(self, type_: DummyDataType, cid: int | None):
+        match type_:
+            case DummyDataType.TRAIN | DummyDataType.TEST:
+                if cid is None:
+                    cid = 0
+                return self.datasets[cid]
 
     def get_dataloader(
         self,
-        type_: str,
+        type_: DummyDataType,
         cid: int | None,
         batch_size: int | None,
         generator: torch.Generator | None = None,
@@ -101,7 +113,7 @@ def tmp_state_dir(tmp_path):
 def test_base_server_and_base_trainer_integration(
     model_selector, partitioned_dataset, device
 ):
-    model_name = "dummy"
+    model_name = DummyModelName.DUMMY
     global_round = 1
     num_clients = 3
     sample_ratio = 1.0
@@ -164,7 +176,7 @@ def test_base_handler_and_process_pool_trainer_integration(
 ):
     mp.set_start_method("spawn", force=True)
 
-    model_name = "dummy"
+    model_name = DummyModelName.DUMMY
     global_round = 2
     num_clients = 10
     sample_ratio = 1.0
@@ -223,7 +235,7 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
 ):
     mp.set_start_method("spawn", force=True)
 
-    model_name = "dummy"
+    model_name = DummyModelName.DUMMY
     global_round = 1
     num_clients = 10
     sample_ratio = 1.0
@@ -285,7 +297,7 @@ def test_base_handler_and_thread_pool_trainer_integration(
 ):
     mp.set_start_method("spawn", force=True)
 
-    model_name = "dummy"
+    model_name = DummyModelName.DUMMY
     global_round = 2
     num_clients = 10
     sample_ratio = 1.0
@@ -351,7 +363,7 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
 ):
     mp.set_start_method("spawn", force=True)
 
-    model_name = "dummy"
+    model_name = DummyModelName.DUMMY
     global_round = 1
     num_clients = 10
     sample_ratio = 1.0
