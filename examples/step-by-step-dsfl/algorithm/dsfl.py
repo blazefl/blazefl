@@ -118,7 +118,9 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
 
         global_soft_labels: list[torch.Tensor] = []
         global_indices: list[int] = []
-        for indices, soft_labels in soft_labels_stack.items():
+        for indices, soft_labels in sorted(
+            soft_labels_stack.items(), key=lambda x: x[0]
+        ):
             global_indices.append(indices)
             mean_soft_labels = torch.mean(torch.stack(soft_labels), dim=0)
             # Entropy Reduction Aggregation (ERA)
@@ -129,7 +131,6 @@ class DSFLBaseServerHandler(BaseServerHandler[DSFLUplinkPackage, DSFLDownlinkPac
         open_loader = DataLoader(
             Subset(open_dataset, global_indices),
             batch_size=self.kd_batch_size,
-            generator=self.rng_suite.torch_cpu,
         )
         DSFLBaseServerHandler.distill(
             self.model,
@@ -364,11 +365,9 @@ class DSFLProcessPoolClientTrainer(
             if kd_optimizer is None:
                 kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
 
-            open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
             open_loader = DataLoader(
                 Subset(open_dataset, global_indices),
                 batch_size=c.kd_batch_size,
-                generator=rng_suite.torch_cpu,
             )
             DSFLBaseServerHandler.distill(
                 model=model,
@@ -404,7 +403,6 @@ class DSFLProcessPoolClientTrainer(
         open_loader = DataLoader(
             Subset(open_dataset, p.next_indices.tolist()),
             batch_size=c.batch_size,
-            generator=rng_suite.torch_cpu,
         )
         soft_labels = DSFLProcessPoolClientTrainer.predict(
             model=model,

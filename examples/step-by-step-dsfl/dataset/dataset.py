@@ -2,7 +2,6 @@ from collections.abc import Sized
 from enum import StrEnum
 from pathlib import Path
 
-import numpy as np
 import torch
 import torchvision
 from blazefl.core import FilteredDataset, PartitionedDataset
@@ -123,7 +122,7 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
             )
             torch.save(client_test_dataset, self.path.joinpath("test", f"{cid}.pkl"))
 
-        open_indices = np.random.choice(
+        open_indices = self.rng_suite.numpy.choice(
             len(open_dataset),
             size=self.open_size,
         )
@@ -197,6 +196,9 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
         assert isinstance(dataset, Sized)
         batch_size = len(dataset) if batch_size is None else batch_size
         data_loader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=True, generator=generator
+            dataset,
+            batch_size=batch_size,
+            shuffle=type_ == DSFLPartitionType.TRAIN,
+            generator=generator,
         )
         return data_loader
