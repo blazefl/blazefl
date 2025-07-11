@@ -19,7 +19,9 @@ release = importlib.metadata.version(project)
 import sys  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-sys.path.insert(0, str(Path("../../src").resolve()))
+sys.path.insert(0, str(Path("../../src/blazefl/core").resolve()))
+sys.path.insert(0, str(Path("../../src/blazefl/contrib").resolve()))
+sys.path.insert(0, str(Path("../../src/blazefl/reproducibility").resolve()))
 
 extensions = [
     "sphinx.ext.napoleon",
