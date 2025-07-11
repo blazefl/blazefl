@@ -416,6 +416,7 @@ def test_base_handler_and_thread_pool_trainer_integration_keyboard_interrupt(
             )
         time.sleep(0.1)
     assert proc.is_alive()
+    time.sleep(3)
 
     os.kill(proc.pid, signal.SIGINT)
 
