@@ -21,7 +21,7 @@ jobs:
         run: uv python install
 
       - name: Install the project
-        run: uv sync --group docs
+        run: uv sync --all-extras --group docs
 
       - run: uv run sphinx-build -M html docs/source docs/build
 
