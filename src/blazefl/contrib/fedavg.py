@@ -551,8 +551,8 @@ class FedAvgProcessPoolClientTrainer(
 
     def progress_fn(
         self,
-        it: list[tuple[int, ApplyResult]],
-    ) -> Iterable[tuple[int, ApplyResult]]:
+        it: list[ApplyResult],
+    ) -> Iterable[ApplyResult]:
         return tqdm(it, desc="Client", leave=False)
 
     def prepare_uplink_package_buffer(self) -> FedAvgProcessPoolUplinkPackage:

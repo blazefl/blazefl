@@ -86,8 +86,9 @@ class ProcessPoolClientTrainer(
     stop_event: threading.Event
 
     def progress_fn(
-        self, it: list[tuple[int, ApplyResult]]
-    ) -> Iterable[tuple[int, ApplyResult]]:
+        self,
+        it: list[ApplyResult],
+    ) -> Iterable[ApplyResult]:
         """
         A no-op progress function that can be overridden to provide custom
         progress tracking.
@@ -194,7 +195,7 @@ class ProcessPoolClientTrainer(
             initargs=(signal.SIGINT, signal.SIG_IGN),
         )
         try:
-            jobs: list[tuple[int, ApplyResult]] = []
+            jobs: list[ApplyResult] = []
             for cid in cid_list:
                 config = self.get_client_config(cid)
                 device = self.get_client_device(cid)
@@ -202,39 +203,35 @@ class ProcessPoolClientTrainer(
                     config_path = self.share_dir.joinpath(f"{cid}.pkl")
                     torch.save(config, config_path)
                     jobs.append(
-                        (
-                            cid,
-                            pool.apply_async(
-                                self.worker,
-                                (config_path, payload_path, device, self.stop_event),
-                            ),
-                        )
+                        pool.apply_async(
+                            self.worker,
+                            (config_path, payload_path, device, self.stop_event),
+                        ),
                     )
                 else:  # shared_memory
                     jobs.append(
-                        (
-                            cid,
-                            pool.apply_async(
-                                self.worker,
-                                (
-                                    config,
-                                    payload,
-                                    device,
-                                    self.stop_event,
-                                ),
-                                kwds={
-                                    "shm_buffer": shm_buffers.get(cid),
-                                },
+                        pool.apply_async(
+                            self.worker,
+                            (
+                                config,
+                                payload,
+                                device,
+                                self.stop_event,
                             ),
-                        )
+                            kwds={
+                                "shm_buffer": shm_buffers.get(cid),
+                            },
+                        ),
+                        # )
                     )
 
-            for job in self.progress_fn(jobs):
-                cid, result = job[0], job[1].get()
+            for i, job in enumerate(self.progress_fn(jobs)):
+                result = job.get()
                 if self.ipc_mode == "storage":
                     assert isinstance(result, Path)
                     package = torch.load(result, weights_only=False)
                 else:  # shared_memory
+                    cid = cid_list[i]
                     package = reconstruct_from_shared_memory(result, shm_buffers[cid])
                 self.cache.append(package)
         finally:
