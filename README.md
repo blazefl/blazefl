@@ -160,6 +160,50 @@ uv add blazefl
 | [Experimental: Multi-Threaded FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.13+'s experimental free-threading mode. | 
 | [Step-by-Step Tutorial: DS-FL](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
 
+
+## Robust Reproducibility
+BlazeFL provides two strategies to ensure the reproducibility of your experiments, especially in complex scenarios like multi-process or multi-threaded environments. To use these features, please install the required dependencies:
+
+```bash
+uv add blazefl[reproducibility]
+```
+
+### 1. Global Seeding Strategy
+
+This is a simpler approach that uses the `seed_everything` function to set a global seed. 
+With this strategy, each child process is responsible for capturing and restoring a `RandomStateSnapshot`, which holds the states of random number generators for libraries like Python's random, NumPy, and PyTorch.
+
+This strategy works effectively with `ProcessPoolClientTrainer`, where each process has its own independent memory space. However, it is **not compatible** with `ThreadPoolClientTrainer`. Because all threads share a single global random number generator, the order of random number consumption becomes non-deterministic, making it impossible to guarantee reproducibility.
+
+### 2. Generator-Based Strategy (Recommended)
+
+This is the **recommended** approach in BlazeFL. It involves using the `create_rng_suite` function to create an `RNGSuite` object, which contains independent, seeded random number generators for each library (Python, NumPy, PyTorch). This avoids reliance on a global state and allows for independent random streams for each component, ensuring robust reproducibility even in parallelized simulations.
+
+#### User Guide
+
+When adopting the generator-based strategy, there's a crucial consideration. Libraries that internally rely on the global random number generator, such as `RandomCrop` or `RandomHorizontalFlip` from `torchvision.transforms`, will not benefit from the `RNGSuite` out of the box.
+
+To resolve this, you must create a custom version of such transforms by inheriting from the original class and modifying it to accept and use a `torch.Generator` instance.
+
+**Example Implementation:** `GeneratorRandomHorizontalFlip`
+
+```python
+import torch
+from torchvision.transforms import RandomHorizontalFlip
+
+class GeneratorRandomHorizontalFlip(RandomHorizontalFlip):
+    def __init__(self, p=0.5, generator: torch.Generator | None = None):
+        super().__init__(p)
+        self.generator = generator
+
+    def forward(self, img):
+        if torch.rand(1, generator=self.generator) < self.p:
+            return F.hflip(img)
+        return img
+```
+
+By integrating these custom `Transform` classes into your dataset pipeline, you can achieve full reproducibility across all execution modes, including `ThreadPoolClientTrainer`.
+
 ## Simulation Benchmarks
 
 To evaluate the performance of BlazeFL, we conducted a comparative benchmark against [Flower](https://github.com/adap/flower), a popular FL framework.
