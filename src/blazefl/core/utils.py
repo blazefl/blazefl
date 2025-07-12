@@ -38,7 +38,7 @@ def process_tensors_in_object(
                          to create a serializable "receipt" object that can be
                          returned from a worker to the parent without copying
                          tensor data.
-        max_depth: The maximum recursion depth. Defaults to 10.
+        max_depth: The maximum recursion depth. Defaults to 1.
 
     Returns:
         - In "move" mode, returns the original object, modified in-place.
