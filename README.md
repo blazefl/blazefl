@@ -17,7 +17,7 @@
 
 - 🍃 **Minimal Dependencies**: The framework's core relies only on [PyTorch](https://github.com/pytorch/pytorch), ensuring a lightweight and straightforward setup. 
 
-- 🔄 **Robust Reproducibility**: Utilities for saving and restoring seed states are provided to ensure consistent results, even in multi-process and multi-threaded environments.
+- 🔄 **Robust Reproducibility**: Ensures true experimental reproducibility with advanced strategies, from full random-state snapshotting to isolated random number generators, guaranteeing consistency in any parallel environment.
 
 - 🛡️ **Structured and Type-Safe by Design**: By leveraging [dataclasses](https://docs.python.org/3/library/dataclasses.html) and [protocols](https://typing.python.org/en/latest/spec/protocol.html), BlazeFL enables the creation of clear, type-safe, and self-documenting communication packages (`UplinkPackage`, `DownlinkPackage`). This design enhances code readability, maintainability, and reduces errors in FL workflows.
 
@@ -159,6 +159,150 @@ uv add blazefl
 | [Quickstart: FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering both **single-threaded** and **multi-process** modes. |
 | [Experimental: Multi-Threaded FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.13+'s experimental free-threading mode. | 
 | [Step-by-Step Tutorial: DS-FL](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
+
+
+## Robust Reproducibility
+BlazeFL provides two strategies to ensure the reproducibility of your experiments, especially in complex scenarios like multi-process or multi-threaded environments. To use these features, please install the required dependencies:
+
+```bash
+uv add blazefl[reproducibility]
+```
+
+### 1. Global Seeding Strategy
+
+This approach uses a single global seed. As the diagram illustrates, after the parent process calls `seed_everything()`, each child process is responsible for its own state management. It must capture a `RandomStateSnapshot` of its random number generators, save it to storage after its work is done, and restore it before the next round.
+
+This strategy works for `ProcessPoolClientTrainer` because each process has its own memory space. However, it is **not compatible** with `ThreadPoolClientTrainer`, as all threads would share and alter a single global state non-deterministically.
+
+```mermaid
+sequenceDiagram
+    participant Parent as Parent Process <br> (ProcessPoolClientTrainer)
+    participant Storage
+    participant Child1 as Child Process 1 <br> (worker)
+    participant Child2 as Child Process 2 <br> (worker)
+
+    Parent->>Parent: seed_everything()
+
+    par Round 1
+        Parent->>Child1: Spawn
+        activate Child1
+        Child1->>Child1: seed_everything()<br>snapshot = RandomStateSnapshot.capture()
+        activate Child1
+        deactivate Child1
+        Child1->>Storage: Save snapshot
+        deactivate Child1
+    and
+        Parent->>Child2: Spawn
+        activate Child2
+        Child2->>Child2: seed_everything()<br>snapshot = RandomStateSnapshot.capture()
+        activate Child2
+        deactivate Child2
+        Child2->>Storage: Save snapshot
+        deactivate Child2
+    end
+
+    loop T rounds
+        par Round t
+            Parent->>Child1: Spawn
+            activate Child1
+            Storage->>Child1: Load snapshot
+            Child1->>Child1: snapshot.restore()
+            activate Child1
+            deactivate Child1
+            Child1->>Child1: snapshot = RandomStateSnapshot.capture()
+            Child1->>Storage: Save snapshot
+            deactivate Child1
+        and
+            Parent->>Child2: Spawn
+            activate Child2
+            Storage->>Child2: Load snapshot
+            Child2->>Child2: snapshot.restore()
+            activate Child2
+            deactivate Child2
+            Child2->>Child2: snapshot = RandomStateSnapshot.capture()
+            Child2->>Storage: Save snapshot
+            deactivate Child2
+        end
+    end
+```
+
+### 2. Generator-Based Strategy (Recommended)
+
+This is the **recommended** approach. It provides each worker its own isolated `RNGSuite` (a collection of random number generators), avoiding global state entirely. The handling differs based on the trainer used:
+
+- With `ProcessPoolClientTrainer`: Since processes don't share memory, each worker creates its own `RNGSuite` on the first round. For subsequent rounds, it saves its `RNGSuite` to storage and loads it back, as shown in the diagram.
+
+- With `ThreadPoolClientTrainer`: Since threads share memory, the parent process can create an `RNGSuite` for every worker and hold them in a list. Each thread then directly accesses its assigned `RNGSuite` from shared memory for each round.
+
+This ensures robust reproducibility in all scenarios.
+
+```mermaid
+sequenceDiagram
+    participant Parent as Parent Process
+    participant Storage
+    participant ChildProc as Child Process i <br> (worker)
+    participant Memory
+    participant ChildThread as Child Thread i <br> (worker)
+
+    Parent->>Parent: setup_reproducibility()<br>rng_suite: RNGSuite = create_rng_suite()
+
+    opt ProcessPoolClientTrainer
+        loop For each training round t
+            par
+                Parent->>ChildProc: Spawn
+                activate ChildProc
+                ChildProc->>ChildProc: setup_reproducibility()
+                alt Round t = 1
+                    ChildProc->>ChildProc: rng_suite: RNGSuite = create_rng_suite()
+                else Round t >= 2
+                    Storage->>ChildProc: Load rng_suite
+                end
+                ChildProc->>ChildProc: Use rng_suite for all random operations
+                ChildProc->>Storage: Save rng_suite
+                deactivate ChildProc
+            end
+        end
+    end
+    opt ThreadPoolClientTrainer
+        Parent->>Memory: create_rng_suite() for each client<br>Hold rng_suite_list
+        loop For each training round t
+            par
+                Parent->>ChildThread: Start
+                activate ChildThread
+                ChildThread->>Memory: Access rng_suite_list
+                activate ChildThread
+                ChildThread->>ChildThread: Use rng_suite = rng_suite_list[i]<br>for all random operations
+                deactivate ChildThread
+                deactivate ChildThread
+            end
+        end
+    end
+```
+
+#### User Guide
+
+When adopting the generator-based strategy, there's a crucial consideration. Libraries that internally rely on the global random number generator, such as `RandomCrop` or `RandomHorizontalFlip` from `torchvision.transforms`, will not benefit from the `RNGSuite` out of the box.
+
+To resolve this, you must create a custom version of such transforms by inheriting from the original class and modifying it to accept and use a `torch.Generator` instance.
+
+**Example Implementation:** `GeneratorRandomHorizontalFlip`
+
+```python
+import torch
+from torchvision.transforms import RandomHorizontalFlip
+
+class GeneratorRandomHorizontalFlip(RandomHorizontalFlip):
+    def __init__(self, p=0.5, generator: torch.Generator | None = None):
+        super().__init__(p)
+        self.generator = generator
+
+    def forward(self, img):
+        if torch.rand(1, generator=self.generator) < self.p:
+            return F.hflip(img)
+        return img
+```
+
+By integrating these custom transforms into your dataset pipeline, you can achieve full reproducibility across all execution modes, including `ThreadPoolClientTrainer`.
 
 ## Simulation Benchmarks
 
