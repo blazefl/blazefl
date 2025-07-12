@@ -18,7 +18,7 @@ T = TypeVar("T")
 
 
 def process_tensors_in_object(
-    obj: T, mode: Literal["move", "replace"], max_depth: int = 1
+    obj: T, mode: Literal["move", "replace"], max_depth: int = 10
 ) -> T:
     """
     Recursively traverses an object to process `torch.Tensor` instances.
@@ -38,7 +38,7 @@ def process_tensors_in_object(
                          to create a serializable "receipt" object that can be
                          returned from a worker to the parent without copying
                          tensor data.
-        max_depth: The maximum recursion depth. Defaults to 1.
+        max_depth: The maximum recursion depth. Defaults to 10.
 
     Returns:
         - In "move" mode, returns the original object, modified in-place.
@@ -52,10 +52,6 @@ def process_tensors_in_object(
     visited = set()
 
     def _recursive_helper(current_obj: Any, depth: int) -> Any:
-        # Stop recursion if the maximum depth is reached.
-        if depth >= max_depth:
-            return
-
         obj_id = id(current_obj)
         # Handle circular references based on the current mode.
         if mode == "move":
@@ -75,6 +71,10 @@ def process_tensors_in_object(
             elif mode == "replace":
                 # Replace the tensor with a handle.
                 return SHMHandle()
+
+        # Stop recursion if the maximum depth is reached.
+        if depth >= max_depth:
+            return current_obj
 
         # --- Recursive processing for container types ---
 
