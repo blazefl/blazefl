@@ -302,7 +302,7 @@ class GeneratorRandomHorizontalFlip(RandomHorizontalFlip):
         return img
 ```
 
-By integrating these custom `Transform` classes into your dataset pipeline, you can achieve full reproducibility across all execution modes, including `ThreadPoolClientTrainer`.
+By integrating these custom transforms into your dataset pipeline, you can achieve full reproducibility across all execution modes, including `ThreadPoolClientTrainer`.
 
 ## Simulation Benchmarks
 
