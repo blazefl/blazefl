@@ -17,7 +17,7 @@
 
 - 🍃 **Minimal Dependencies**: The framework's core relies only on [PyTorch](https://github.com/pytorch/pytorch), ensuring a lightweight and straightforward setup. 
 
-- 🔄 **Robust Reproducibility**: Utilities for saving and restoring seed states are provided to ensure consistent results, even in multi-process and multi-threaded environments.
+- 🔄 **Robust Reproducibility**: Ensures true experimental reproducibility with advanced strategies, from full random-state snapshotting to isolated random number generators, guaranteeing consistency in any parallel environment.
 
 - 🛡️ **Structured and Type-Safe by Design**: By leveraging [dataclasses](https://docs.python.org/3/library/dataclasses.html) and [protocols](https://typing.python.org/en/latest/spec/protocol.html), BlazeFL enables the creation of clear, type-safe, and self-documenting communication packages (`UplinkPackage`, `DownlinkPackage`). This design enhances code readability, maintainability, and reduces errors in FL workflows.
 
@@ -230,7 +230,7 @@ sequenceDiagram
 
 This is the **recommended** approach. It provides each worker its own isolated `RNGSuite` (a collection of random number generators), avoiding global state entirely. The handling differs based on the trainer used:
 
-- With `ProcessPoolClientTrainer`: Since processes don't share memory, each worker creates its own `RNGSuite` on the first round. For subsequent rounds, it saves its `RNGSuit`e to storage and loads it back, as shown in the diagram.
+- With `ProcessPoolClientTrainer`: Since processes don't share memory, each worker creates its own `RNGSuite` on the first round. For subsequent rounds, it saves its `RNGSuite` to storage and loads it back, as shown in the diagram.
 
 - With `ThreadPoolClientTrainer`: Since threads share memory, the parent process can create an `RNGSuite` for every worker and hold them in a list. Each thread then directly accesses its assigned `RNGSuite` from shared memory for each round.
 
