@@ -14,8 +14,10 @@ from blazefl.core.model_selector import ModelSelector
 from blazefl.core.partitioned_dataset import FilteredDataset, PartitionedDataset
 from blazefl.core.server_handler import BaseServerHandler
 from blazefl.core.utils import (
+    SHMHandle,
     deserialize_model,
-    move_tensor_to_shared_memory,
+    process_tensors_in_object,
+    reconstruct_from_shared_memory,
     serialize_model,
 )
 
@@ -29,5 +31,7 @@ __all__ = [
     "BaseServerHandler",
     "serialize_model",
     "deserialize_model",
-    "move_tensor_to_shared_memory",
+    "process_tensors_in_object",
+    "reconstruct_from_shared_memory",
+    "SHMHandle",
 ]

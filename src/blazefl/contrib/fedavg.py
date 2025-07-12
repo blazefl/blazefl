@@ -22,6 +22,7 @@ from blazefl.core import (
     deserialize_model,
     serialize_model,
 )
+from blazefl.core.utils import SHMHandle
 from blazefl.reproducibility import (
     RNGSuite,
     create_rng_suite,
@@ -46,6 +47,11 @@ class FedAvgUplinkPackage:
     model_parameters: torch.Tensor
     data_size: int
     metadata: dict[str, float] | None = None
+
+
+@dataclass
+class FedAvgProcessPoolUplinkPackage(FedAvgUplinkPackage):
+    model_parameters: torch.Tensor | SHMHandle  # type: ignore
 
 
 @dataclass
@@ -456,7 +462,7 @@ class FedAvgClientConfig:
 
 class FedAvgProcessPoolClientTrainer(
     ProcessPoolClientTrainer[
-        FedAvgUplinkPackage, FedAvgDownlinkPackage, FedAvgClientConfig
+        FedAvgProcessPoolUplinkPackage, FedAvgDownlinkPackage, FedAvgClientConfig
     ]
 ):
     """
@@ -539,11 +545,22 @@ class FedAvgProcessPoolClientTrainer(
         self.manager = mp.Manager()
         self.stop_event = self.manager.Event()
 
+        self.model_parameters_buffer = serialize_model(
+            self.model_selector.select_model(model_name)
+        )
+
     def progress_fn(
         self,
         it: list[ApplyResult],
     ) -> Iterable[ApplyResult]:
         return tqdm(it, desc="Client", leave=False)
+
+    def prepare_uplink_package_buffer(self) -> FedAvgProcessPoolUplinkPackage:
+        return FedAvgProcessPoolUplinkPackage(
+            cid=-1,
+            model_parameters=self.model_parameters_buffer.clone(),
+            data_size=0,
+        )
 
     @staticmethod
     def worker(
@@ -551,7 +568,9 @@ class FedAvgProcessPoolClientTrainer(
         payload: FedAvgDownlinkPackage | Path,
         device: str,
         stop_event: threading.Event,
-    ) -> FedAvgUplinkPackage | Path:
+        *,
+        shm_buffer: FedAvgProcessPoolUplinkPackage | None = None,
+    ) -> FedAvgProcessPoolUplinkPackage | Path:
         """
         Process a single client's local training and evaluation.
 
@@ -598,7 +617,7 @@ class FedAvgProcessPoolClientTrainer(
             payload: FedAvgDownlinkPackage,
             device: str,
             stop_event: threading.Event,
-        ) -> FedAvgUplinkPackage:
+        ) -> FedAvgProcessPoolUplinkPackage:
             setup_reproducibility(config.seed)
             if config.state_path.exists():
                 state = torch.load(config.state_path, weights_only=False)
@@ -636,7 +655,15 @@ class FedAvgProcessPoolClientTrainer(
         elif isinstance(config, FedAvgClientConfig) and isinstance(
             payload, FedAvgDownlinkPackage
         ):
-            return _shared_memory_worker(config, payload, device, stop_event)
+            package = _shared_memory_worker(config, payload, device, stop_event)
+            assert (
+                shm_buffer is not None
+                and isinstance(shm_buffer.model_parameters, torch.Tensor)
+                and isinstance(package.model_parameters, torch.Tensor)
+            )
+            shm_buffer.model_parameters.copy_(package.model_parameters)
+            package.model_parameters = SHMHandle()
+            return package
         else:
             raise TypeError(
                 "Invalid types for config and payload."
@@ -653,7 +680,7 @@ class FedAvgProcessPoolClientTrainer(
         lr: float,
         stop_event: threading.Event,
         cid: int,
-    ) -> FedAvgUplinkPackage:
+    ) -> FedAvgProcessPoolUplinkPackage:
         """
         Train the model with the given training data loader.
 
@@ -694,7 +721,7 @@ class FedAvgProcessPoolClientTrainer(
 
         model_parameters = serialize_model(model)
 
-        return FedAvgUplinkPackage(cid, model_parameters, data_size)
+        return FedAvgProcessPoolUplinkPackage(cid, model_parameters, data_size)
 
     def get_client_config(self, cid: int) -> FedAvgClientConfig:
         """
@@ -719,7 +746,7 @@ class FedAvgProcessPoolClientTrainer(
         )
         return data
 
-    def uplink_package(self) -> list[FedAvgUplinkPackage]:
+    def uplink_package(self) -> list[FedAvgProcessPoolUplinkPackage]:
         """
         Retrieve the uplink packages for transmission to the server.
 
