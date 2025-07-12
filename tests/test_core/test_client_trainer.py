@@ -7,6 +7,7 @@ import pytest
 import torch
 import torch.multiprocessing as mp
 
+from blazefl.core.utils import SHMHandle
 from src.blazefl.core import ProcessPoolClientTrainer
 
 
@@ -14,6 +15,7 @@ from src.blazefl.core import ProcessPoolClientTrainer
 class UplinkPackage:
     cid: int
     message: str
+    tensor: torch.Tensor | SHMHandle
 
 
 @dataclass
@@ -53,12 +55,17 @@ class DummyProcessPoolClientTrainer(
     def get_client_config(self, cid: int) -> ClientConfig:
         return ClientConfig(cid=cid)
 
+    def prepare_uplink_package_buffer(self) -> UplinkPackage:
+        return UplinkPackage(cid=-1, message="", tensor=torch.zeros(1))
+
     @staticmethod
     def worker(
         config: ClientConfig | Path,
         payload: DownlinkPackage | Path,
         device: str,
         stop_event: threading.Event,
+        *,
+        shm_buffer: UplinkPackage | None = None,
     ) -> UplinkPackage | Path:
         def _storage_worker(
             config_path: Path,
@@ -87,14 +94,20 @@ class DummyProcessPoolClientTrainer(
             _ = stop_event
             _ = device
             dummy_uplink_package = UplinkPackage(
-                cid=config.cid, message=payload.message + "<client_to_server>"
+                cid=config.cid,
+                tensor=torch.rand(1),
+                message=payload.message + "<client_to_server>",
             )
             return dummy_uplink_package
 
         if isinstance(config, Path) and isinstance(payload, Path):
             return _storage_worker(config, payload, device, stop_event)
         elif isinstance(config, ClientConfig) and isinstance(payload, DownlinkPackage):
-            return _shared_memory_worker(config, payload, device, stop_event)
+            package = _shared_memory_worker(config, payload, device, stop_event)
+            assert shm_buffer is not None
+            shm_buffer.tensor = package.tensor
+            package.tensor = SHMHandle()
+            return package
         else:
             raise TypeError(
                 "Invalid types for config and payload."
