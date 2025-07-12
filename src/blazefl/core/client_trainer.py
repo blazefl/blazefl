@@ -9,7 +9,7 @@ from typing import Literal, Protocol, TypeVar
 import torch
 import torch.multiprocessing as mp
 
-from blazefl.core.utils import move_tensor_to_shared_memory
+from blazefl.core.utils import process_tensors_in_object, reconstruct_from_shared_memory
 
 UplinkPackage = TypeVar("UplinkPackage")
 DownlinkPackage = TypeVar("DownlinkPackage", contravariant=True)
@@ -85,7 +85,9 @@ class ProcessPoolClientTrainer(
     ipc_mode: Literal["storage", "shared_memory"] = "storage"
     stop_event: threading.Event
 
-    def progress_fn(self, it: list[ApplyResult]) -> Iterable[ApplyResult]:
+    def progress_fn(
+        self, it: list[tuple[int, ApplyResult]]
+    ) -> Iterable[tuple[int, ApplyResult]]:
         """
         A no-op progress function that can be overridden to provide custom
         progress tracking.
@@ -130,6 +132,8 @@ class ProcessPoolClientTrainer(
         payload: DownlinkPackage | Path,
         device: str,
         stop_event: threading.Event,
+        *,
+        shm_buffer: UplinkPackage | None = None,
     ) -> UplinkPackage | Path:
         """
         Process a single client's training task.
@@ -154,6 +158,9 @@ class ProcessPoolClientTrainer(
         """
         ...
 
+    def prepare_uplink_package_buffer(self) -> UplinkPackage:
+        raise NotImplementedError
+
     def local_process(self, payload: DownlinkPackage, cid_list: list[int]) -> None:
         """
         Manage the parallel processing of clients.
@@ -169,11 +176,16 @@ class ProcessPoolClientTrainer(
             None
         """
         payload_path = Path()
+        shm_buffers = {}
         if self.ipc_mode == "storage":
             payload_path = self.share_dir.joinpath("payload.pkl")
             torch.save(payload, payload_path)
         else:  # shared_memory
-            move_tensor_to_shared_memory(payload)
+            process_tensors_in_object(payload, mode="move")
+            for cid in cid_list:
+                buffer = self.prepare_uplink_package_buffer()
+                process_tensors_in_object(buffer, mode="move")
+                shm_buffers[cid] = buffer
 
         self.stop_event.clear()
         pool = mp.Pool(
@@ -182,7 +194,7 @@ class ProcessPoolClientTrainer(
             initargs=(signal.SIGINT, signal.SIG_IGN),
         )
         try:
-            jobs: list[ApplyResult] = []
+            jobs: list[tuple[int, ApplyResult]] = []
             for cid in cid_list:
                 config = self.get_client_config(cid)
                 device = self.get_client_device(cid)
@@ -190,25 +202,40 @@ class ProcessPoolClientTrainer(
                     config_path = self.share_dir.joinpath(f"{cid}.pkl")
                     torch.save(config, config_path)
                     jobs.append(
-                        pool.apply_async(
-                            self.worker,
-                            (config_path, payload_path, device, self.stop_event),
+                        (
+                            cid,
+                            pool.apply_async(
+                                self.worker,
+                                (config_path, payload_path, device, self.stop_event),
+                            ),
                         )
                     )
                 else:  # shared_memory
                     jobs.append(
-                        pool.apply_async(
-                            self.worker, (config, payload, device, self.stop_event)
+                        (
+                            cid,
+                            pool.apply_async(
+                                self.worker,
+                                (
+                                    config,
+                                    payload,
+                                    device,
+                                    self.stop_event,
+                                ),
+                                kwds={
+                                    "shm_buffer": shm_buffers.get(cid),
+                                },
+                            ),
                         )
                     )
 
             for job in self.progress_fn(jobs):
-                result = job.get()
+                cid, result = job[0], job[1].get()
                 if self.ipc_mode == "storage":
                     assert isinstance(result, Path)
                     package = torch.load(result, weights_only=False)
                 else:  # shared_memory
-                    package = result
+                    package = reconstruct_from_shared_memory(result, shm_buffers[cid])
                 self.cache.append(package)
         finally:
             self.stop_event.set()
