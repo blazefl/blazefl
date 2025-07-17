@@ -100,7 +100,7 @@ Meanwhile, `get_dataloader` wraps that dataset in a `DataLoader`.
 This design is flexible enough even for methods like DS-FL, which rely on an open dataset.
 If you don’t need one of these methods, you can simply implement it with `pass`.
 
-You can view the complete source code [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/dataset).
+You can view the complete source code [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/dataset).
 
 ## Implementing a ModelSelector
 
@@ -136,7 +136,7 @@ class DSFLModelSelector(ModelSelector[DSFLModelName]):
 Here, we define model names using `StrEnum` for better type safety. The `select_model` method then takes a `DSFLModelName` and returns the corresponding `nn.Module`.
 You can store useful information (like the number of classes) as attributes in your `ModelSelector`.
 
-The full source code can be found [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/models).
+The full source code can be found [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/models).
 
 ## Defining DownlinkPackage and UplinkPackage
 
@@ -261,7 +261,7 @@ If any of these methods are not needed for your approach, you can simply impleme
 
 In DS-FL, the `global_update` method aggregates the soft labels from clients and distills them into a global model.
 However, you have the flexibility to place any custom operations in these or other methods.
-You can find more details in the [official documentation](https://kitsuyaazuma.github.io/blazefl/generated/blazefl.core.BaseServerHandler.html#blazefl.core.BaseServerHandler).
+You can find more details in the [official documentation](https://blazefl.github.io/blazefl/generated/blazefl.core.BaseServerHandler.html#blazefl.core.BaseServerHandler).
 
 
 ## Implementing a ProcessPoolClientTrainer
@@ -433,7 +433,7 @@ You mainly need to implement:
 By storing shared data on disk instead of passing it directly, you avoid complex shared memory management.
 This design makes it straightforward to enable parallel training.
 
-The complete source code is [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/algorithm/dsfl.py).
+The complete source code is [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/algorithm/dsfl.py).
 
 ## Implementing a Pipeline
 
@@ -480,7 +480,7 @@ This pipeline is almost identical to one you might create for FedAvg or another 
 
 In this snippet, we use TensorBoard via SummaryWriter for logging, but you’re free to use alternatives like [W&B](https://github.com/wandb/wandb).
 
-You can see the full source code [here](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl/main.py).
+You can see the full source code [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/main.py).
 
 ## Running the Simulation
 
