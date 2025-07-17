@@ -9,7 +9,7 @@ Welcome to the quickstart guide for the Federated Averaging (FedAvg [^1]) with B
 First, clone the BlazeFL repository and navigating to the `quickstart-fedavg` directory:
 
 ```bash
-git clone https://github.com/kitsuyaazuma/blazefl.git
+git clone https://github.com/blazefl/blazefl.git
 cd blazefl/examples/quickstart-fedavg
 ```
 
