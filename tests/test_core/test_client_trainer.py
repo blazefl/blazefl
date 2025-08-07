@@ -1,12 +1,12 @@
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import pytest
 import torch
 import torch.multiprocessing as mp
 
+from blazefl.core.client_trainer import IPCMode
 from blazefl.core.utils import SHMHandle
 from src.blazefl.core import ProcessPoolClientTrainer
 
@@ -36,7 +36,7 @@ class DummyProcessPoolClientTrainer(
         num_parallels: int,
         share_dir: Path,
         device: str,
-        ipc_mode: Literal["storage", "shared_memory"],
+        ipc_mode: IPCMode,
     ):
         self.num_parallels = num_parallels
         self.share_dir = share_dir
@@ -122,7 +122,7 @@ def test_process_pool_client_trainer(
     tmp_path: Path,
     num_parallels: int,
     cid_list: list[int],
-    ipc_mode: Literal["storage", "shared_memory"],
+    ipc_mode: IPCMode,
 ) -> None:
     trainer = DummyProcessPoolClientTrainer(
         num_parallels=num_parallels,
