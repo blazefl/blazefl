@@ -13,9 +13,11 @@ from blazefl.contrib import (
 )
 from blazefl.reproducibility import setup_reproducibility
 from hydra.core import hydra_config
-from omegaconf import DictConfig, OmegaConf
+from hydra.core.config_store import ConfigStore
+from omegaconf import OmegaConf
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from config import MyConfig
 from dataset import PartitionedCIFAR10
 from models import FedAvgModelSelector
 
@@ -57,8 +59,12 @@ class FedAvgPipeline:
         logging.info("done!")
 
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
-def main(cfg: DictConfig):
+cs = ConfigStore.instance()
+cs.store(name="config", node=MyConfig)
+
+
+@hydra.main(version_base=None, config_name="config")
+def main(cfg: MyConfig):
     print(OmegaConf.to_yaml(cfg))
 
     log_dir = hydra_config.HydraConfig.get().runtime.output_dir

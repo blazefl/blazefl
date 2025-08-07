@@ -76,6 +76,11 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
         assert isinstance(dataset, Dataset)
         return dataset
 
+    def set_dataset(
+        self, type_: DSFLPartitionType, cid: int | None, dataset: Dataset
+    ) -> None:
+        ...  # Omitted for brevity
+
     def get_dataloader(
         self,
         type_: DSFLPartitionType,
@@ -96,6 +101,7 @@ class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
 ```
 
 Here, `get_dataset` returns a `Dataset` for the specified type (e.g., "train", "open", or "test") and client ID.
+`set_dataset` saves a dataset to the specified path.
 Meanwhile, `get_dataloader` wraps that dataset in a `DataLoader`.
 This design is flexible enough even for methods like DS-FL, which rely on an open dataset.
 If you don’t need one of these methods, you can simply implement it with `pass`.
@@ -256,6 +262,8 @@ The `BaseServerHandler` class requires five core methods to be implemented:
 - `load`
 - `global_update`
 - `downlink_package`
+
+Additionally, you can implement other methods like `get_summary` to get a summary of the round.
 
 If any of these methods are not needed for your approach, you can simply implement them with `pass`.
 
@@ -489,7 +497,7 @@ In our example, we use [Hydra](https://hydra.cc/) to handle hyperparameter confi
 To run the DS-FL simulation:
 
 ```bash
-uv run python main.py +algorithm=dsfl
+uv run python main.py
 ```
 
 To visualize metrics in TensorBoard:

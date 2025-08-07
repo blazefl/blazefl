@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from blazefl.core import (
     BaseServerHandler,
     FilteredDataset,
+    IPCMode,
     ProcessPoolClientTrainer,
 )
 from blazefl.reproducibility import RNGSuite, create_rng_suite, setup_reproducibility
@@ -312,7 +313,7 @@ class DSFLProcessPoolClientTrainer(
         self.device = device
         self.num_clients = num_clients
         self.seed = seed
-        self.ipc_mode = "storage"
+        self.ipc_mode = IPCMode(IPCMode.STORAGE)
         self.manager = mp.Manager()
         self.stop_event = self.manager.Event()
 
@@ -331,6 +332,8 @@ class DSFLProcessPoolClientTrainer(
         payload: DSFLDownlinkPackage | Path,
         device: str,
         stop_event: threading.Event,
+        *,
+        shm_buffer: DSFLUplinkPackage | None = None,
     ) -> Path:
         assert isinstance(config, Path) and isinstance(payload, Path)
         config_path, payload_path = config, payload
