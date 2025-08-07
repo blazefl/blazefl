@@ -2,9 +2,10 @@ import threading
 from blazefl.core.utils import process_tensors_in_object as process_tensors_in_object, reconstruct_from_shared_memory as reconstruct_from_shared_memory
 from collections.abc import Iterable
 from concurrent.futures import Future as Future
+from enum import StrEnum
 from multiprocessing.pool import ApplyResult as ApplyResult
 from pathlib import Path
-from typing import Literal, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
 UplinkPackage = TypeVar('UplinkPackage')
 DownlinkPackage = TypeVar('DownlinkPackage', contravariant=True)
@@ -14,13 +15,17 @@ class BaseClientTrainer(Protocol[UplinkPackage, DownlinkPackage]):
     def local_process(self, payload: DownlinkPackage, cid_list: list[int]) -> None: ...
 ClientConfig = TypeVar('ClientConfig')
 
+class IPCMode(StrEnum):
+    STORAGE: str
+    SHARED_MEMORY: str
+
 class ProcessPoolClientTrainer(BaseClientTrainer[UplinkPackage, DownlinkPackage], Protocol[UplinkPackage, DownlinkPackage, ClientConfig]):
     num_parallels: int
     share_dir: Path
     device: str
     device_count: int
     cache: list[UplinkPackage]
-    ipc_mode: Literal['storage', 'shared_memory']
+    ipc_mode: IPCMode
     stop_event: threading.Event
     def progress_fn(self, it: list[ApplyResult]) -> Iterable[ApplyResult]: ...
     def get_client_config(self, cid: int) -> ClientConfig: ...

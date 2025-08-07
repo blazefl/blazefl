@@ -2,9 +2,10 @@ import signal
 import threading
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
+from enum import StrEnum
 from multiprocessing.pool import ApplyResult
 from pathlib import Path
-from typing import Literal, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
 import torch
 import torch.multiprocessing as mp
@@ -53,6 +54,11 @@ class BaseClientTrainer(Protocol[UplinkPackage, DownlinkPackage]):
 ClientConfig = TypeVar("ClientConfig")
 
 
+class IPCMode(StrEnum):
+    STORAGE = "storage"
+    SHARED_MEMORY = "shared_memory"
+
+
 class ProcessPoolClientTrainer(
     BaseClientTrainer[UplinkPackage, DownlinkPackage],
     Protocol[UplinkPackage, DownlinkPackage, ClientConfig],
@@ -82,7 +88,7 @@ class ProcessPoolClientTrainer(
     device: str
     device_count: int
     cache: list[UplinkPackage]
-    ipc_mode: Literal["storage", "shared_memory"] = "storage"
+    ipc_mode: IPCMode = IPCMode.STORAGE
     stop_event: threading.Event
 
     def progress_fn(
@@ -178,7 +184,7 @@ class ProcessPoolClientTrainer(
         """
         payload_path = Path()
         shm_buffers = {}
-        if self.ipc_mode == "storage":
+        if self.ipc_mode == IPCMode.STORAGE:
             payload_path = self.share_dir.joinpath("payload.pkl")
             torch.save(payload, payload_path)
         else:  # shared_memory
@@ -199,7 +205,7 @@ class ProcessPoolClientTrainer(
             for cid in cid_list:
                 config = self.get_client_config(cid)
                 device = self.get_client_device(cid)
-                if self.ipc_mode == "storage":
+                if self.ipc_mode == IPCMode.STORAGE:
                     config_path = self.share_dir.joinpath(f"{cid}.pkl")
                     torch.save(config, config_path)
                     jobs.append(
@@ -227,7 +233,7 @@ class ProcessPoolClientTrainer(
 
             for i, job in enumerate(self.progress_fn(jobs)):
                 result = job.get()
-                if self.ipc_mode == "storage":
+                if self.ipc_mode == IPCMode.STORAGE:
                     assert isinstance(result, Path)
                     package = torch.load(result, weights_only=False)
                 else:  # shared_memory
