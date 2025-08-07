@@ -18,7 +18,7 @@ class MyConfig:
     epochs: int = 5
     lr: float = 0.1
     batch_size: int = 50
-    num_parallels: int = 100
+    num_parallels: int = 10
     dataset_root_dir: str = "/tmp/quickstart-fedavg/dataset"
     dataset_split_dir: str = "/tmp/quickstart-fedavg/split"
     share_dir: str = "/tmp/quickstart-fedavg/share"
