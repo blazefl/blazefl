@@ -157,6 +157,9 @@ class ProcessPoolClientTrainer(
                 The downlink payload from the server, or a path to a file
                 containing the payload if `ipc_mode` is "storage".
             device (str): Device to use for processing (e.g., "cpu", "cuda:0").
+            stop_event (threading.Event): Event to signal stopping the worker.
+            shm_buffer (UplinkPackage | None):
+                Optional shared memory buffer for the uplink package.
 
         Returns:
             UplinkPackage | Path:
@@ -294,11 +297,30 @@ class ThreadPoolClientTrainer(
         ...
 
     def get_client_device(self, cid: int) -> str:
+        """
+        Retrieve the device to use for processing a given client.
+
+        Args:
+            cid (int): Client ID.
+
+        Returns:
+            str: The device to use for processing the client.
+        """
         if self.device == "cuda":
             return f"cuda:{cid % self.device_count}"
         return self.device
 
     def local_process(self, payload: DownlinkPackage, cid_list: list[int]) -> None:
+        """
+        Manage the parallel processing of clients using threads.
+
+        This method distributes the processing of multiple clients across
+        a pool of threads.
+
+        Args:
+            payload (DownlinkPackage): The data package received from the server.
+            cid_list (list[int]): A list of client IDs to process.
+        """
         self.stop_event.clear()
         executor = ThreadPoolExecutor(max_workers=self.num_parallels)
         try:

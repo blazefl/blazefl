@@ -586,6 +586,8 @@ class FedAvgProcessPoolClientTrainer(
                 The downlink payload from the server, or a path to a file
                 containing the payload if `ipc_mode` is "storage".
             device (str): Device to use for processing (e.g., "cpu", "cuda:0").
+            shm_buffer (FedAvgProcessPoolUplinkPackage | None):
+                Optional shared memory buffer for the uplink package.
 
         Returns:
             FedAvgUplinkPackage | Path:
