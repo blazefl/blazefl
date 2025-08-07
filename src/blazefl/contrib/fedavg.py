@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from multiprocessing.pool import ApplyResult
 from pathlib import Path
-from typing import Literal
 
 import torch
 import torch.multiprocessing as mp
@@ -15,14 +14,15 @@ from tqdm import tqdm
 from blazefl.core import (
     BaseClientTrainer,
     BaseServerHandler,
+    IPCMode,
     ModelSelector,
     PartitionedDataset,
     ProcessPoolClientTrainer,
+    SHMHandle,
     ThreadPoolClientTrainer,
     deserialize_model,
     serialize_model,
 )
-from blazefl.core.utils import SHMHandle
 from blazefl.reproducibility import (
     RNGSuite,
     create_rng_suite,
@@ -503,7 +503,7 @@ class FedAvgProcessPoolClientTrainer(
         lr: float,
         seed: int,
         num_parallels: int,
-        ipc_mode: Literal["storage", "shared_memory"],
+        ipc_mode: IPCMode,
     ) -> None:
         """
         Initialize the FedAvgParalleClientTrainer.

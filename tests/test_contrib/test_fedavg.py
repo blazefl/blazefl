@@ -10,6 +10,7 @@ import torch
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, Dataset
 
+from blazefl.core.client_trainer import IPCMode
 from src.blazefl.contrib.fedavg import (
     FedAvgBaseClientTrainer,
     FedAvgBaseServerHandler,
@@ -170,7 +171,7 @@ def _run_process_pool_trainer(
         trainer.local_process(downlink, cids)
 
 
-@pytest.mark.parametrize("ipc_mode", ["storage", "shared_memory"])
+@pytest.mark.parametrize("ipc_mode", [IPCMode.STORAGE, IPCMode.SHARED_MEMORY])
 def test_base_handler_and_process_pool_trainer_integration(
     model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir, ipc_mode
 ):
