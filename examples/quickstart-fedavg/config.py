@@ -24,4 +24,4 @@ class MyConfig:
     share_dir: str = "/tmp/quickstart-fedavg/share"
     state_dir: str = "/tmp/quickstart-fedavg/state"
     execution_mode: str = "multi-process"
-    ipc_mode: IPCMode = IPCMode.SHARED_MEMORY
+    ipc_mode: IPCMode = IPCMode(IPCMode.SHARED_MEMORY)

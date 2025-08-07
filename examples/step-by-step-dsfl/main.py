@@ -7,13 +7,14 @@ import torch
 import torch.multiprocessing as mp
 from blazefl.reproducibility import setup_reproducibility
 from hydra.core import hydra_config
-from omegaconf import DictConfig, OmegaConf
+from hydra.core.config_store import ConfigStore
+from omegaconf import OmegaConf
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from algorithm import DSFLBaseServerHandler, DSFLProcessPoolClientTrainer
+from config import MyConfig
 from dataset import DSFLPartitionedDataset
 from models import DSFLModelSelector
-from models.selector import DSFLModelName
 
 
 class DSFLPipeline:
@@ -51,10 +52,12 @@ class DSFLPipeline:
         logging.info("done!")
 
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
-def main(
-    cfg: DictConfig,
-):
+cs = ConfigStore.instance()
+cs.store(name="config", node=MyConfig)
+
+
+@hydra.main(version_base=None, config_name="config")
+def main(cfg: MyConfig):
     print(OmegaConf.to_yaml(cfg))
 
     log_dir = hydra_config.HydraConfig.get().runtime.output_dir
@@ -66,7 +69,12 @@ def main(
     share_dir = Path(cfg.share_dir).joinpath(timestamp)
     state_dir = Path(cfg.state_dir).joinpath(timestamp)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    logging.info(f"device: {device}")
 
     setup_reproducibility(cfg.seed)
 
@@ -83,10 +91,9 @@ def main(
 
     match cfg.algorithm.name:
         case "dsfl":
-            model_name = DSFLModelName(cfg.model_name)
             handler = DSFLBaseServerHandler(
                 model_selector=model_selector,
-                model_name=model_name,
+                model_name=cfg.model_name,
                 dataset=dataset,
                 global_round=cfg.global_round,
                 num_clients=cfg.num_clients,
@@ -101,7 +108,7 @@ def main(
             )
             trainer = DSFLProcessPoolClientTrainer(
                 model_selector=model_selector,
-                model_name=model_name,
+                model_name=cfg.model_name,
                 dataset=dataset,
                 share_dir=share_dir,
                 state_dir=state_dir,
