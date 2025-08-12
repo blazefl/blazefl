@@ -17,7 +17,7 @@ class SHMHandle:
 T = TypeVar("T")
 
 
-def process_tensors_in_object(
+def process_tensors_in_object(  # noqa: UP047
     obj: T, mode: Literal["move", "replace"], max_depth: int = 10
 ) -> T:
     """
@@ -139,7 +139,7 @@ def process_tensors_in_object(
         return _recursive_helper(obj, 0)
 
 
-def reconstruct_from_shared_memory(handle_obj: T, shm_obj: T) -> T:
+def reconstruct_from_shared_memory(handle_obj: T, shm_obj: T) -> T:  # noqa: UP047
     """
     Recursively reconstructs an object from a handle-based object and a
     shared memory buffer object.
