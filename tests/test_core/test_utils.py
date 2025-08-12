@@ -59,9 +59,9 @@ def test_serialize_deserialize_gpu(simple_model: torch.nn.Module) -> None:
         for orig_p, new_p in zip(
             original_params, simple_model.parameters(), strict=True
         ):
-            assert torch.allclose(
-                orig_p.cpu(), new_p
-            ), "Parameters did not restore correctly."
+            assert torch.allclose(orig_p.cpu(), new_p), (
+                "Parameters did not restore correctly."
+            )
 
 
 @dataclass
@@ -139,15 +139,15 @@ def test_process_tensors_replace_mode(complex_object: ComplexData):
         complex_object, mode="replace", max_depth=10
     )
 
-    assert (
-        id(handle_package) != original_id
-    ), "Object ID should be different in 'replace' mode"
+    assert id(handle_package) != original_id, (
+        "Object ID should be different in 'replace' mode"
+    )
     assert isinstance(handle_package.tensor_a, SHMHandle)
     assert isinstance(handle_package.tensor_b, SHMHandle)
     assert isinstance(handle_package.nested.tensor, SHMHandle)
-    assert (
-        handle_package.metadata["name"] == "test_object"
-    ), "Non-tensor data should be preserved"
+    assert handle_package.metadata["name"] == "test_object", (
+        "Non-tensor data should be preserved"
+    )
 
 
 def test_reconstruct_from_shared_memory(complex_object: ComplexData):
@@ -169,21 +169,21 @@ def test_reconstruct_from_shared_memory(complex_object: ComplexData):
     final_package = reconstruct_from_shared_memory(handle_package, shm_buffer)
 
     # 5. Assertions
-    assert torch.allclose(
-        final_package.tensor_a, shm_buffer.tensor_a
-    ), "Tensor A should be from shm_buffer"
-    assert torch.allclose(
-        final_package.nested.tensor, shm_buffer.nested.tensor
-    ), "Nested tensor should be from shm_buffer"
-    assert (
-        final_package.metadata["value"] == 999
-    ), "Metadata update from handle_package should be preserved"
-    assert (
-        final_package.nested.id == 5
-    ), "Nested ID update from handle_package should be preserved"
-    assert not isinstance(
-        final_package.tensor_a, SHMHandle
-    ), "Final package should not contain handles"
+    assert torch.allclose(final_package.tensor_a, shm_buffer.tensor_a), (
+        "Tensor A should be from shm_buffer"
+    )
+    assert torch.allclose(final_package.nested.tensor, shm_buffer.nested.tensor), (
+        "Nested tensor should be from shm_buffer"
+    )
+    assert final_package.metadata["value"] == 999, (
+        "Metadata update from handle_package should be preserved"
+    )
+    assert final_package.nested.id == 5, (
+        "Nested ID update from handle_package should be preserved"
+    )
+    assert not isinstance(final_package.tensor_a, SHMHandle), (
+        "Final package should not contain handles"
+    )
 
 
 def test_circular_reference_handling(circular_object: ComplexData):
