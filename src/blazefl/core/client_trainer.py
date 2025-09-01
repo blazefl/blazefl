@@ -77,8 +77,8 @@ class ProcessPoolClientTrainer(
         device (str): The primary device to use for computation (e.g., "cpu", "cuda").
         device_count (int): The number of available CUDA devices, if `device` is "cuda".
         cache (list[UplinkPackage]): Cache to store uplink packages from clients.
-        ipc_mode (IPCMode): Inter-process communication mode. "storage" uses disk
-            for data exchange, "shared_memory" uses shared memory for tensor data.
+        ipc_mode (IPCMode): Inter-process communication mode. IPCMode.STORAGE uses disk
+            for data exchange, IPCMode.SHARED_MEMORY uses shared memory for tensor data.
             Defaults to IPCMode.STORAGE.
 
     Raises:
