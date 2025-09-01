@@ -55,8 +55,10 @@ ClientConfig = TypeVar("ClientConfig")
 
 
 class IPCMode(StrEnum):
-    STORAGE = "storage"
-    SHARED_MEMORY = "shared_memory"
+    """Inter-process communication modes for data exchange between processes."""
+
+    STORAGE = "STORAGE"
+    SHARED_MEMORY = "SHARED_MEMORY"
 
 
 class ProcessPoolClientTrainer(
@@ -75,9 +77,9 @@ class ProcessPoolClientTrainer(
         device (str): The primary device to use for computation (e.g., "cpu", "cuda").
         device_count (int): The number of available CUDA devices, if `device` is "cuda".
         cache (list[UplinkPackage]): Cache to store uplink packages from clients.
-        ipc_mode (Literal["storage", "shared_memory"]): Inter-process communication
-            mode. "storage" uses disk for data exchange, "shared_memory" uses
-            shared memory for tensor data. Defaults to "storage".
+        ipc_mode (IPCMode): Inter-process communication mode. "storage" uses disk
+            for data exchange, "shared_memory" uses shared memory for tensor data.
+            Defaults to IPCMode.STORAGE.
 
     Raises:
         NotImplementedError: If the abstract methods are not implemented in a subclass.
