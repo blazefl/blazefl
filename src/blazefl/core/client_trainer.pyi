@@ -16,8 +16,8 @@ class BaseClientTrainer(Protocol[UplinkPackage, DownlinkPackage]):
 ClientConfig = TypeVar('ClientConfig')
 
 class IPCMode(StrEnum):
-    STORAGE = "storage"
-    SHARED_MEMORY = "shared_memory"
+    STORAGE = "STORAGE"
+    SHARED_MEMORY = "SHARED_MEMORY"
 
 class ProcessPoolClientTrainer(BaseClientTrainer[UplinkPackage, DownlinkPackage], Protocol[UplinkPackage, DownlinkPackage, ClientConfig]):
     num_parallels: int
