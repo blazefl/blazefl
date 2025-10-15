@@ -11,7 +11,7 @@
 
 ## Feature Highlights
 
-- 🚀 **High Performance**: Optimized for single-node simulations, BlazeFL allows you to adjust the degree of parallelism for efficient resource management. 
+- 🚀 **High Performance**: Optimized for single-node simulations, BlazeFL leverages Python 3.14's free-threading to deliver top-tier performance, especially in the multi-threaded mode.
 
 - 🧩 **High Extensibility**: BlazeFL focuses on core communication and parallelization interfaces, avoiding excessive abstraction to maintain flexibility. 
 
@@ -25,38 +25,14 @@
 
 BlazeFL offers three distinct execution modes, each providing a different balance between implementation simplicity and performance.
 
-### 1. Single-Threaded Mode
-
-**Executes clients sequentially in a single thread.**
-
-This is the most straightforward mode, making it ideal for simple simulations or debugging, though it offers the lowest throughput. This mode is implemented using the `BaseClientTrainer` class.
-
-```mermaid
-graph LR
-    subgraph "`BaseServerHandler`"
-      STS[Server]
-    end
-    subgraph "BaseClientTrainer"
-      STJ@{ shape: f-circ, label: "Junction" } --> ST1[Client 1]
-      ST1 --> ST2[Client 2]
-      ST2 --> ST3[Client 3]
-      ST3 -...-> STK-2[Client K-2]
-      STK-2 -..-> STK-1[Client K-1]
-      STK-1 --> STK[Client K]
-    end
-    STK --> STJ
-    STJ --> STS
-    STS --> STJ
-```
-
-### 2. Multi-Threaded Mode (Experimental)
+### 1. Multi-Threaded Mode (Reccommended)
 
 **Leverages multiple threads to process clients in parallel within the same process.**
 
 This mode, implemented via the `ThreadPoolClientTrainer` class, can offer faster performance while maintaining a simpler implementation than multi-processing.
 
 > [!IMPORTANT]
-> To achieve true parallelism, this mode requires [Python 3.13+ with the experimental free-threading build](https://docs.python.org/3/howto/free-threading-python.html) enabled. Without it, performance will be limited by the Global Interpreter Lock (GIL), resulting in concurrency rather than true parallelism.
+> To achieve true parallelism, this mode requires a Python 3.14+ free-threading build. Without it, performance will be limited by the Global Interpreter Lock (GIL), resulting in concurrency rather than true parallelism. Python 3.13 also offers an experimental version of this feature.
 
 ```mermaid
 graph LR
@@ -95,11 +71,11 @@ graph LR
     STS --> STJ1
 ```
 
-### 3. Multi-Process Mode
+### 2. Multi-Process Mode
 
 **Utilizes separate processes to achieve true parallelism and robust resource isolation.**
 
-This production-ready mode, corresponding to the `ProcessPoolClientTrainer` class, offers excellent performance. It provides two options for Inter-Process Communication (IPC), configurable via the `ipc_mode` parameter, to suit your needs:
+This mode, corresponding to the `ProcessPoolClientTrainer` class, offers excellent performance. It provides two options for Inter-Process Communication (IPC), configurable via the `ipc_mode` parameter, to suit your needs:
 - **Storage Mode**: Shares parameters via disk, reducing memory usage.
 - **Shared Memory Mode**: Shares parameters directly in shared memory for potentially faster performance.
 
@@ -140,6 +116,30 @@ graph LR
     STS --> SPJ1
 ```
 
+### 3. Single-Threaded Mode
+
+**Executes clients sequentially in a single thread.**
+
+This is the most straightforward mode, making it ideal for simple simulations or debugging, though it offers the lowest throughput. This mode is implemented using the `BaseClientTrainer` class.
+
+```mermaid
+graph LR
+    subgraph "`BaseServerHandler`"
+      STS[Server]
+    end
+    subgraph "BaseClientTrainer"
+      STJ@{ shape: f-circ, label: "Junction" } --> ST1[Client 1]
+      ST1 --> ST2[Client 2]
+      ST2 --> ST3[Client 3]
+      ST3 -...-> STK-2[Client K-2]
+      STK-2 -..-> STK-1[Client K-1]
+      STK-1 --> STK[Client K]
+    end
+    STK --> STJ
+    STJ --> STS
+    STS --> STJ
+```
+
 ## Getting Started
 
 ### Installation
@@ -157,7 +157,7 @@ uv add blazefl
 | Example | Description | 
 |---------|-------------|
 | [Quickstart: FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering both **single-threaded** and **multi-process** modes. |
-| [Experimental: Multi-Threaded FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.13+'s experimental free-threading mode. | 
+| [High-Performance: Multi-Threaded FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.14+'s officially supported free-threading. | 
 | [Step-by-Step Tutorial: DS-FL](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
 
 
@@ -173,6 +173,9 @@ uv add blazefl[reproducibility]
 This approach uses a single global seed. As the diagram illustrates, after the parent process calls `seed_everything()`, each child process is responsible for its own state management. It must capture a `RandomStateSnapshot` of its random number generators, save it to storage after its work is done, and restore it before the next round.
 
 This strategy works for `ProcessPoolClientTrainer` because each process has its own memory space. However, it is **not compatible** with `ThreadPoolClientTrainer`, as all threads would share and alter a single global state non-deterministically.
+
+<details>
+<summary>Click to see the diagram</summary>
 
 ```mermaid
 sequenceDiagram
@@ -225,6 +228,7 @@ sequenceDiagram
         end
     end
 ```
+</details>
 
 ### 2. Generator-Based Strategy (Recommended)
 
@@ -235,6 +239,9 @@ This is the **recommended** approach. It provides each worker its own isolated `
 - With `ThreadPoolClientTrainer`: Since threads share memory, the parent process can create an `RNGSuite` for every worker and hold them in a list. Each thread then directly accesses its assigned `RNGSuite` from shared memory for each round.
 
 This ensures robust reproducibility in all scenarios.
+
+<details>
+<summary>Click to see the diagram</summary>
 
 ```mermaid
 sequenceDiagram
@@ -278,6 +285,7 @@ sequenceDiagram
         end
     end
 ```
+</details>
 
 #### User Guide
 
@@ -306,33 +314,35 @@ By integrating these custom transforms into your dataset pipeline, you can achie
 
 ## Simulation Benchmarks
 
-To evaluate the performance of BlazeFL, we conducted a comparative benchmark against [Flower](https://github.com/adap/flower), a popular FL framework.
+To showcase the performance of BlazeFL, we conducted a benchmark against [Flower](https://github.com/adap/flower), a popular FL framework. With the official support for free-threading in Python 3.14, BlazeFL's multi-threaded mode now offers exceptional performance for single-node simulations.
 
 ### Benchmark Setup
 
-The benchmark was performed using the **FedAvg** algorithm on the **CIFAR-10** dataset. The simulation was configured with **100 clients**, **5 communication** rounds, and **5 local epochs** for two models: a small [CNN](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html) and a large [ResNet18](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html).
+The benchmark was performed using the **FedAvg** algorithm on the **CIFAR-10** dataset. The simulation was configured with **100 clients**, **5 communication** rounds, and **5 local epochs** for two models: a small [CNN](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html) and a larger [ResNet18](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html).
 
 ### Execution Environment
 
-The benchmark was conducted in the following Podman container environment:
-- **CPU**: 12 CPU
-- **Memory**: 85 GB
-- **Shared Memory**: 32 GB
-- **GPU**: 2 x NVIDIA RTX A6000
+The benchmark was conducted on a single node with the following specifications:
 
-> [!NOTE]
-> This benchmark was run in a container, and the resources are not completely isolated from other processes. Therefore, please consider these results as reference values. A more rigorous evaluation is planned to be conducted on a cloud VM in the future.
+- **CPU**: AMD EPYC 7542 (32 Cores)
+- **Memory**: 256 GB
+- **GPU**: 4 x Quadro RTX 6000
+- **Shared Memory**: 32 GB
+- **Python**: BlazeFL was run with Python 3.13.7 (experimental free-threading build), while Flower was run with Python 3.13.7 (with GIL) due to library compatibility at the time of testing
 
 ### Results
 
+The results demonstrate that BlazeFL's multi-threaded mode is the clear winner, outperforming both its own multi-process mode and Flower in nearly all scenarios.
+
 <div style="display: flex; justify-content: center; align-items: center;">
-  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.svg" alt="CNN" width="48%" />
-  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.svg" alt="ResNet18" width="48%" />
+  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.png" alt="CNN" width="48%" />
+  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.png" alt="ResNet18" width="48%" />
 </div>
 <br>
 
-The benchmark results indicate that BlazeFL has competitive performance against Flower. This is noteworthy as BlazeFL achieves this with a significantly smaller codebase relying only on standard Python libraries and PyTorch, whereas Flower is a powerful framework built on top of Ray. In particular, the experimental multi-threaded mode shows the potential for even higher performance due to its lightweight threads.
+For both the lightweight CNN and the more demanding ResNet-18, the multi-threaded mode scales exceptionally well, leveraging the direct memory access between threads to minimize overhead. This advantage is particularly pronounced in the CNN benchmark, where the overhead of process-based methods (BlazeFL's multiprocessing and Flower's Ray backend) is more significant relative to the computation time. Even with the heavier ResNet-18 model, the multi-threaded mode maintains a consistent performance lead.
 
+This benchmark highlights the power of free-threaded Python for CPU-bound, data-intensive workloads like FL simulations. By eliminating the GIL and avoiding the costs of serialization and inter-process communication, BlazeFL's multi-threaded mode offers a simpler and faster solution for researchers and developer
 
 ## Contributing
 
