@@ -341,7 +341,7 @@ The results demonstrate that BlazeFL's multi-threaded mode is the clear winner, 
 
 For both the lightweight CNN and the more demanding ResNet-18, the multi-threaded mode scales exceptionally well, leveraging the direct memory access between threads to minimize overhead. This advantage is particularly pronounced in the CNN benchmark, where the overhead of process-based methods (BlazeFL's multiprocessing and Flower's Ray backend) is more significant relative to the computation time. Even with the heavier ResNet-18 model, the multi-threaded mode maintains a consistent performance lead.
 
-This benchmark highlights the power of free-threaded Python for CPU-bound, data-intensive workloads like FL simulations. By eliminating the GIL and avoiding the costs of serialization and inter-process communication, BlazeFL's multi-threaded mode offers a simpler and faster solution for researchers and developer
+This benchmark highlights the power of free-threaded Python for CPU-bound, data-intensive workloads like FL simulations. By eliminating the GIL and avoiding the costs of serialization and inter-process communication, BlazeFL's multi-threaded mode offers a simpler and faster solution for researchers and developers.
 
 ## Contributing
 
