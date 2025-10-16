@@ -21,15 +21,16 @@ cd step-by-step-dsfl
 Next, Initialize the project with [uv](https://github.com/astral-sh/uv) (or any other package manager of your choice).
 
 ```bash
-uv init --python 3.13
+uv python pin 3.14
+uv init -p 3.14
 ```
 
 Then, create a virtual environment and install BlazeFL. 
 
 ```bash
-uv venv
+uv venv -p 3.14
 # source .venv/bin/activate
-uv add blazefl
+uv add "blazefl[reproducibility]"
 ```
 
 ## Implementing a PartitionedDataset
@@ -44,9 +45,9 @@ For example, you can implement `DSFLPartitionedDataset` like this:
 from blazefl.core import PartitionedDataset
 
 class DSFLPartitionType(StrEnum):
-    TRAIN = "train"
-    OPEN = "open"
-    TEST = "test"
+    TRAIN = "TRAIN"
+    OPEN = "OPEN"
+    TEST = "TEST"
 
 class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
     # Omited for brevity
@@ -121,8 +122,8 @@ from enum import StrEnum
 from blazefl.core import ModelSelector
 
 class DSFLModelName(StrEnum):
-    CNN = "cnn"
-    RESNET18 = "resnet18"
+    CNN = "CNN"
+    RESNET18 = "RESNET18"
 
 class DSFLModelSelector(ModelSelector[DSFLModelName]):
     def __init__(self, num_classes: int, seed: int) -> None:
@@ -367,6 +368,9 @@ class DSFLProcessPoolClientTrainer(
             epochs=c.epochs,
             stop_event=stop_event,
         )
+        c.dataset.set_dataset(
+            dataset=train_loader.dataset, type_=DSFLPartitionType.TRAIN, cid=c.cid
+        )
 
         # Predict
         open_loader = DataLoader(
@@ -454,11 +458,11 @@ class DSFLPipeline:
         self,
         handler: DSFLBaseServerHandler,
         trainer: DSFLProcessPoolClientTrainer,
-        writer: SummaryWriter,
+        run: wandb.Run,
     ) -> None:
         self.handler = handler
         self.trainer = trainer
-        self.writer = writer
+        self.run = run
 
     def main(self):
         while not self.handler.if_stop():
@@ -476,8 +480,7 @@ class DSFLPipeline:
                 self.handler.load(pack)
 
             summary = self.handler.get_summary()
-            for key, value in summary.items():
-                self.writer.add_scalar(key, value, round_)
+            self.run.log(summary, step=round_)
             formatted_summary = ", ".join(f"{k}: {v:.3f}" for k, v in summary.items())
             logging.info(f"round: {round_}, {formatted_summary}")
 
@@ -486,24 +489,18 @@ class DSFLPipeline:
 
 This pipeline is almost identical to one you might create for FedAvg or another standard FL method, showcasing how reusable these components are. 
 
-In this snippet, we use TensorBoard via SummaryWriter for logging, but you’re free to use alternatives like [W&B](https://github.com/wandb/wandb).
+In this snippet, we use [W&B](https://github.com/wandb/wandb) for logging, but you’re free to use alternatives like TensorBoard.
 
 You can see the full source code [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/main.py).
 
 ## Running the Simulation
 
-In our example, we use [Hydra](https://hydra.cc/) to handle hyperparameter configuration. Feel free to use any configuration system you like.
+In our example, we use [Typer](https://github.com/fastapi/typer) to handle hyperparameter configuration. Feel free to use any configuration system you like.
 
 To run the DS-FL simulation:
 
 ```bash
 uv run python main.py
-```
-
-To visualize metrics in TensorBoard:
-
-```bash
-make visualize
 ```
 
 ## Conclusion

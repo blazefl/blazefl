@@ -13,10 +13,11 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-  "torch>=2.5.1",
+  "torch>=2.8.0",
 ]
 
 [project.optional-dependencies]

@@ -9,8 +9,8 @@ from models.cnn import CNN
 
 
 class DSFLModelName(StrEnum):
-    CNN = "cnn"
-    RESNET18 = "resnet18"
+    CNN = "CNN"
+    RESNET18 = "RESNET18"
 
 
 class DSFLModelSelector(ModelSelector[DSFLModelName]):
