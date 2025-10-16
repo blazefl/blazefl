@@ -458,7 +458,7 @@ class DSFLPipeline:
         self,
         handler: DSFLBaseServerHandler,
         trainer: DSFLProcessPoolClientTrainer,
-        writer: wandb.Run,
+        run: wandb.Run,
     ) -> None:
         self.handler = handler
         self.trainer = trainer
