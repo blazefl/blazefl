@@ -156,8 +156,7 @@ uv add blazefl
 
 | Example | Description | 
 |---------|-------------|
-| [Quickstart: FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering both **single-threaded** and **multi-process** modes. |
-| [High-Performance: Multi-Threaded FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/experimental-freethreaded) | Explore high-performance parallel training with a **multi-threaded** FedAvg, leveraging Python 3.14+'s officially supported free-threading. | 
+| [Quickstart: FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering single-threaded, multi-process, and multi-threaded modes. |
 | [Step-by-Step Tutorial: DS-FL](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
 
 
