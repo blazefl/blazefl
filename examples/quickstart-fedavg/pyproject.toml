@@ -14,6 +14,10 @@ dependencies = [
 [tool.basedpyright]
 typeCheckingMode = "standard"
 
+[[tool.mypy.overrides]]
+module = ["torchvision.*"]
+ignore_missing_imports = true
+
 [tool.ruff.lint]
 select = [
     "E",  # pycodestyle

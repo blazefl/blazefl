@@ -1,9 +1,13 @@
 format:
-	ruff format .
+	uv run ruff format .
 
 lint:
-	ruff check . --fix
-	mypy src
+	uv run ruff check . --fix --preview
+
+type-check:
+	uv run mypy src 
+
+check: format lint type-check
 
 test:
 	pytest -v tests

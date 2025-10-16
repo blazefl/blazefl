@@ -2,8 +2,12 @@ format:
 	uv run ruff format .
 
 lint:
-	uv run ruff check . --fix
-	uv run mypy . --ignore-missing-imports
+	uv run ruff check . --fix --preview
 
-visualize:
-	uv run tensorboard --logdir=./outputs
+type-check:
+	uv run mypy .
+
+check: format lint type-check
+
+sync:
+	uv run wandb sync --sync-all
