@@ -13,9 +13,9 @@ from .functional import balance_split, client_inner_dirichlet_partition_faster
 
 
 class DSFLPartitionType(StrEnum):
-    TRAIN = "train"
-    OPEN = "open"
-    TEST = "test"
+    TRAIN = "TRAIN"
+    OPEN = "OPEN"
+    TEST = "TEST"
 
 
 class DSFLPartitionedDataset(PartitionedDataset[DSFLPartitionType]):
