@@ -8,8 +8,8 @@ from torchvision.models import resnet18
 
 
 class FedAvgModelName(StrEnum):
-    CNN = "cnn"
-    RESNET18 = "resnet18"
+    CNN = "CNN"
+    RESNET18 = "RESNET18"
 
 
 class FedAvgModelSelector(ModelSelector[FedAvgModelName]):

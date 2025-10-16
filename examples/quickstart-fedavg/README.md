@@ -26,15 +26,21 @@ uv sync
 To run the FedAvg example, use the following command:
 
 ```bash
-uv run python main.py num_parallels=5
+uv run python main.py --num-parallels 5
 ```
 
-Adjust the `num_parallels` parameter to suit your system’s specifications for optimal performance.
+Adjust the `--num-parallels` parameter to suit your system’s specifications for optimal performance.
 
-For more options and configurations, see the `config.yaml` file. All hyperparameters are managed with Hydra and located under the `config/` directory. You can override any setting directly from the command line:
+All hyperparameters are managed with [Typer](https://github.com/fastapi/typer). You can see all available options by running:
 
 ```bash
-uv run python main.py partition=client_inner_dirichlet dir_alpha=0.5
+uv run python main.py --help
+```
+
+You can override any setting directly from the command line:
+
+```bash
+uv run python main.py --partition client_inner_dirichlet --dir-alpha 0.5
 ```
 
 
