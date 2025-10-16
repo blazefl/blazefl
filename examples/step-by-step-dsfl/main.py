@@ -144,7 +144,7 @@ def main(
     setup_logging()
     logging.info("\n" + "\n".join([f"  {k}: {v}" for k, v in config.items()]))
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H:%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dataset_split_dir = dataset_root_dir / timestamp
     share_dir = share_dir_base / timestamp
     state_dir = state_dir_base / timestamp
