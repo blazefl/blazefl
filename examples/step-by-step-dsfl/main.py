@@ -21,8 +21,6 @@ from algorithm import DSFLBaseServerHandler, DSFLProcessPoolClientTrainer
 from dataset import DSFLPartitionedDataset
 from models import DSFLModelName, DSFLModelSelector
 
-app = typer.Typer(add_completion=False)
-
 
 class DSFLPipeline:
     def __init__(
@@ -70,7 +68,6 @@ def setup_logging() -> None:
     logger.addHandler(handler)
 
 
-@app.command()
 def main(
     model_name: Annotated[
         DSFLModelName, typer.Option(help="Name of the model to be used.")

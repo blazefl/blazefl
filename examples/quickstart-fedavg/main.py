@@ -28,8 +28,6 @@ from dataset import PartitionedCIFAR10
 from models import FedAvgModelSelector
 from models.selector import FedAvgModelName
 
-app = typer.Typer(add_completion=False)
-
 
 class FedAvgPipeline:
     def __init__(
@@ -79,7 +77,6 @@ def setup_logging() -> None:
     logger.addHandler(handler)
 
 
-@app.command()
 def main(
     model_name: Annotated[
         FedAvgModelName, typer.Option(help="Name of the model to be used.")
