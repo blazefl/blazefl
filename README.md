@@ -25,7 +25,7 @@
 
 BlazeFL offers three distinct execution modes, each providing a different balance between implementation simplicity and performance.
 
-### 1. Multi-Threaded Mode (Reccommended)
+### 1. Multi-Threaded Mode (Recommended)
 
 **Leverages multiple threads to process clients in parallel within the same process.**
 
