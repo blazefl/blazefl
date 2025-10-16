@@ -1,4 +1,11 @@
+# ruff: noqa: E402
 import logging
+import warnings
+
+from pydantic.warnings import UnsupportedFieldAttributeWarning
+
+warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
+
 import sys
 from datetime import datetime
 from pathlib import Path
