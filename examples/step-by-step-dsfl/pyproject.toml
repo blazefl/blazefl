@@ -31,6 +31,9 @@ select = [
 ignore = []
 fixable = ["ALL"]
 
+[tool.ruff.lint.isort]
+known-third-party = ["wandb"]
+
 [tool.uv.sources]
 blazefl = { workspace = true }
 

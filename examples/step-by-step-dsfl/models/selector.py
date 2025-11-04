@@ -19,7 +19,7 @@ class DSFLModelSelector(ModelSelector[DSFLModelName]):
         self.seed = seed
 
     def select_model(self, model_name: DSFLModelName) -> nn.Module:
-        with torch.random.fork_rng():
+        with torch.random.fork_rng([]):
             torch.manual_seed(self.seed)
             match model_name:
                 case DSFLModelName.CNN:

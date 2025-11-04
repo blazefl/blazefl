@@ -15,7 +15,7 @@ def test_rng_suite_creation_and_reproducibility() -> None:
     torch_cpu_val1 = torch.rand(1, generator=rng_suite1.torch_cpu)
     torch_cuda_val1 = None
     if rng_suite1.torch_cuda:
-        torch_cuda_val1 = torch.rand(1, generator=rng_suite1.torch_cuda)
+        torch_cuda_val1 = torch.rand(1, device="cuda", generator=rng_suite1.torch_cuda)
 
     rng_suite2 = create_rng_suite(seed)
     py_val2 = rng_suite2.python.random()
@@ -23,7 +23,7 @@ def test_rng_suite_creation_and_reproducibility() -> None:
     torch_cpu_val2 = torch.rand(1, generator=rng_suite2.torch_cpu)
     torch_cuda_val2 = None
     if rng_suite2.torch_cuda:
-        torch_cuda_val2 = torch.rand(1, generator=rng_suite2.torch_cuda)
+        torch_cuda_val2 = torch.rand(1, device="cuda", generator=rng_suite2.torch_cuda)
 
     assert py_val1 == py_val2
     assert np_val1 == np_val2

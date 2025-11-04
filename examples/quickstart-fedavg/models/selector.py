@@ -18,7 +18,7 @@ class FedAvgModelSelector(ModelSelector[FedAvgModelName]):
         self.seed = seed
 
     def select_model(self, model_name: FedAvgModelName) -> nn.Module:
-        with torch.random.fork_rng():
+        with torch.random.fork_rng([]):
             torch.manual_seed(self.seed)
             match model_name:
                 case FedAvgModelName.CNN:

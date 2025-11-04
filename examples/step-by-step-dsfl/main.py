@@ -14,9 +14,9 @@ from typing import Annotated
 import torch
 import torch.multiprocessing as mp
 import typer
+import wandb
 from blazefl.reproducibility import setup_reproducibility
 
-import wandb
 from algorithm import DSFLBaseServerHandler, DSFLProcessPoolClientTrainer
 from dataset import DSFLPartitionedDataset
 from models import DSFLModelName, DSFLModelSelector
