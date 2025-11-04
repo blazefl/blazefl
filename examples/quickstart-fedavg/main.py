@@ -14,6 +14,7 @@ from typing import Annotated
 import torch
 import torch.multiprocessing as mp
 import typer
+import wandb
 from blazefl.contrib import (
     FedAvgBaseClientTrainer,
     FedAvgBaseServerHandler,
@@ -23,7 +24,6 @@ from blazefl.contrib import (
 from blazefl.core import IPCMode
 from blazefl.reproducibility import setup_reproducibility
 
-import wandb
 from dataset import PartitionedCIFAR10
 from models import FedAvgModelSelector
 from models.selector import FedAvgModelName
