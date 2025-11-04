@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Protocol, TypeVar
 
 import torch
-import torch.multiprocessing as mp
 
 from blazefl.core.utils import process_tensors_in_object, reconstruct_from_shared_memory
 
@@ -187,6 +186,8 @@ class ProcessPoolClientTrainer(
         Returns:
             None
         """
+        import torch.multiprocessing as mp
+
         payload_path = Path()
         shm_buffers = {}
         if self.ipc_mode == IPCMode.STORAGE:
