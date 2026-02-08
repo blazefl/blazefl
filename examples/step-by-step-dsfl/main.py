@@ -101,7 +101,7 @@ def main(
     num_parallels: Annotated[
         int,
         typer.Option(help="Number of parallel processes for training."),
-    ] = 5,
+    ] = 10,
     dataset_root_dir: Annotated[
         Path, typer.Option(help="Root directory for the dataset.")
     ] = Path("/tmp/step-by-step-dsfl/dataset"),

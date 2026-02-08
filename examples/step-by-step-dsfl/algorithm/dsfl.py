@@ -312,6 +312,7 @@ class DSFLThreadPoolClientTrainer(
         self.stop_event = threading.Event()
 
         self.client_states: dict[int, DSFLClientState] = {}
+        self.lock = threading.Lock()
 
     def progress_fn(
         self, it: list[Future[DSFLUplinkPackage]]
@@ -329,16 +330,18 @@ class DSFLThreadPoolClientTrainer(
         optimizer = torch.optim.SGD(model.parameters(), lr=self.lr)
         kd_optimizer: torch.optim.SGD | None = None
 
-        if cid in self.client_states:
-            state = self.client_states[cid]
-            rng_suite = state.random
-            model.load_state_dict(state.model)
-            optimizer.load_state_dict(state.optimizer)
-            if state.kd_optimizer is not None:
-                kd_optimizer = torch.optim.SGD(model.parameters(), lr=self.kd_lr)
-                kd_optimizer.load_state_dict(state.kd_optimizer)
-        else:
-            rng_suite = create_rng_suite(self.seed)
+        with self.lock:
+            if cid in self.client_states:
+                state = self.client_states[cid]
+                rng_suite = state.random
+                model.load_state_dict(state.model)
+                optimizer.load_state_dict(state.optimizer)
+                if state.kd_optimizer is not None:
+                    kd_optimizer = torch.optim.SGD(model.parameters(), lr=self.kd_lr)
+                    assert kd_optimizer is not None
+                    kd_optimizer.load_state_dict(state.kd_optimizer)
+            else:
+                rng_suite = create_rng_suite(self.seed)
 
         # Distill
         open_dataset = self.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
@@ -412,12 +415,13 @@ class DSFLThreadPoolClientTrainer(
             metadata={"loss": loss, "acc": acc},
         )
 
-        self.client_states[cid] = DSFLClientState(
-            random=rng_suite,
-            model=model.state_dict(),
-            optimizer=optimizer.state_dict(),
-            kd_optimizer=kd_optimizer.state_dict() if kd_optimizer else None,
-        )
+        with self.lock:
+            self.client_states[cid] = DSFLClientState(
+                random=rng_suite,
+                model=model.state_dict(),
+                optimizer=optimizer.state_dict(),
+                kd_optimizer=kd_optimizer.state_dict() if kd_optimizer else None,
+            )
 
         return package
 
