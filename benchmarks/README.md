@@ -3,7 +3,7 @@
 ## Usage
 
 ```bash
-git clone https://github.com/blazefl/blazefl.git
+git clone https://github.com/kitsuyaazuma/blazefl.git
 cd blazefl/benchmarks
 
 uv sync

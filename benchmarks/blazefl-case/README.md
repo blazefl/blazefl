@@ -1,11 +1,11 @@
 # Benchmark: BlazeFL
 
-This benchmark measures the performance of [BlazeFL](https://github.com/blazefl/blazefl).
+This benchmark measures the performance of [BlazeFL](https://github.com/kitsuyaazuma/blazefl).
 
 ## Setup
 
 ```bash
-git clone https://github.com/blazefl/blazefl.git
+git clone https://github.com/kitsuyaazuma/blazefl.git
 cd blazefl/benchmarks/blazefl-case
 
 uv sync

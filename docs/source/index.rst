@@ -19,7 +19,7 @@ BlazeFL Documentation
 
 - 🛡️ **Structured and Type-Safe by Design**: By leveraging `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_ and `protocols <https://typing.python.org/en/latest/spec/protocol.html>`_, BlazeFL enables the creation of clear, type-safe, and self-documenting communication packages (``UplinkPackage``, ``DownlinkPackage``). This design enhances code readability, maintainability, and reduces errors in FL workflows.
 
-For a comprehensive overview, including detailed execution modes, benchmarks, and setup examples, please refer to the `README.md <https://github.com/blazefl/blazefl/blob/main/README.md>`_ on our GitHub repository.
+For a comprehensive overview, including detailed execution modes, benchmarks, and setup examples, please refer to the `README.md <https://github.com/kitsuyaazuma/blazefl/blob/main/README.md>`_ on our GitHub repository.
 
 .. toctree::
    :maxdepth: 1

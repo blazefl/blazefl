@@ -54,16 +54,17 @@ class ProcessPoolClientTrainer(
     Protocol[UplinkPackage, DownlinkPackage, ClientConfig],
 ):
     """
-    Abstract base class for parallel client training in federated learning.
+    Abstract base class for parallel client training using a process pool.
 
-    This class extends SerialClientTrainer to enable parallel processing of clients,
-    allowing multiple clients to be trained concurrently.
+    This class enables parallel processing of clients by distributing tasks across
+    multiple processes.
 
     Attributes:
-        num_parallels (int): Number of parallel processes to use for client training.
-        device (str): The primary device to use for computation (e.g., "cpu", "cuda").
-        device_count (int): The number of available CUDA devices, if `device` is "cuda".
-        cache (list[UplinkPackage]): Cache to store uplink packages from clients.
+        num_parallels (int): Number of parallel processes to use.
+        device (str): Primary device for computation (e.g., "cpu", "cuda").
+        device_count (int): Number of available CUDA devices for distribution.
+        cache (list[UplinkPackage]): Cache to store results from clients.
+        stop_event (threading.Event): Event to signal workers to stop.
 
     Raises:
         NotImplementedError: If the abstract methods are not implemented in a subclass.
@@ -216,6 +217,22 @@ class ThreadPoolClientTrainer(
     BaseClientTrainer[UplinkPackage, DownlinkPackage],
     Protocol[UplinkPackage, DownlinkPackage],
 ):
+    """
+    Abstract base class for parallel client training using a thread pool.
+
+    This class enables parallel processing of clients within a processes.
+
+    Attributes:
+        num_parallels (int): Number of parallel threads to use.
+        device (str): Primary device for computation (e.g., "cpu", "cuda").
+        device_count (int): Number of available CUDA devices for distribution.
+        cache (list[UplinkPackage]): Cache to store results from clients.
+        stop_event (threading.Event): Event to signal workers to stop.
+
+    Raises:
+        NotImplementedError: If the abstract methods are not implemented in a subclass.
+    """
+
     num_parallels: int
     device: str
     device_count: int

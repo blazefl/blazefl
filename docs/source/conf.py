@@ -10,7 +10,7 @@ import importlib.metadata
 
 project = "blazefl"
 author = "kitsuyaazuma"
-copyright = f"2025, {author}"
+copyright = f"2026, {author}"
 release = importlib.metadata.version(project)
 
 # -- General configuration ---------------------------------------------------

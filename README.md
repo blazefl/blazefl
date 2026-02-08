@@ -1,4 +1,4 @@
-<div align="center"><img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/logo.svg" width=600></div>
+<div align="center"><img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/logo.svg" width=600></div>
 <div align="center">A blazing-fast, minimalist, and researcher-friendly simulation framework for Federated Learning</div>
 <br>
 <div align="center">
@@ -154,8 +154,8 @@ uv add blazefl
 
 | Example | Description | 
 |---------|-------------|
-| [Quickstart: FedAvg](https://github.com/blazefl/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering single-threaded, multi-process, and multi-threaded modes. |
-| [Step-by-Step Tutorial: DS-FL](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
+| [Quickstart: FedAvg](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/quickstart-fedavg) | Learn the fundamentals of BlazeFL with a standard Federated Averaging (FedAvg) implementation, covering single-threaded, multi-process, and multi-threaded modes. |
+| [Step-by-Step Tutorial: DS-FL](https://github.com/kitsuyaazuma/blazefl/tree/main/examples/step-by-step-dsfl) | Build a custom distillation-based Federated Learning algorithm from scratch, and understand how to implement your own algorithms on the BlazeFL framework. |
 
 
 ## Robust Reproducibility
@@ -332,8 +332,8 @@ The benchmark was conducted on a single node with the following specifications:
 The results demonstrate that BlazeFL's multi-threaded mode is the clear winner, outperforming both its own multi-process mode and Flower in nearly all scenarios.
 
 <div style="display: flex; justify-content: center; align-items: center;">
-  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.png" alt="CNN" width="48%" />
-  <img src="https://raw.githubusercontent.com/blazefl/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.png" alt="ResNet18" width="48%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_cnn.png" alt="CNN" width="48%" />
+  <img src="https://raw.githubusercontent.com/kitsuyaazuma/blazefl/refs/heads/main/docs/imgs/benchmark_resnet18.png" alt="ResNet18" width="48%" />
 </div>
 <br>
 
@@ -343,6 +343,6 @@ This benchmark highlights the power of free-threaded Python for CPU-bound, data-
 
 ## Contributing
 
-We welcome contributions from the community! If you'd like to contribute to this project, please see our [contribution guidelines](https://github.com/blazefl/blazefl/blob/main/docs/source/contribute.rst) for more information on how to get started.
+We welcome contributions from the community! If you'd like to contribute to this project, please see our [contribution guidelines](https://github.com/kitsuyaazuma/blazefl/blob/main/docs/source/contribute.rst) for more information on how to get started.
 
-Please note that this project is governed by our [Code of Conduct](https://github.com/blazefl/blazefl/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+Please note that this project is governed by our [Code of Conduct](https://github.com/kitsuyaazuma/blazefl/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.

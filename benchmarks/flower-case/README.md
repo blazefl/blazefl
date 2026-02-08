@@ -5,7 +5,7 @@ This benchmark measures the performance of [Flower](https://github.com/adap/flow
 ## Setup
 
 ```bash
-git clone https://github.com/blazefl/blazefl.git
+git clone https://github.com/kitsuyaazuma/blazefl.git
 cd blazefl/benchmarks/flower-case
 
 uv sync
