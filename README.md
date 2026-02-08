@@ -75,9 +75,7 @@ graph LR
 
 **Utilizes separate processes to achieve true parallelism and robust resource isolation.**
 
-This mode, corresponding to the `ProcessPoolClientTrainer` class, offers excellent performance. It provides two options for Inter-Process Communication (IPC), configurable via the `ipc_mode` parameter, to suit your needs:
-- **Storage Mode**: Shares parameters via disk, reducing memory usage.
-- **Shared Memory Mode**: Shares parameters directly in shared memory for potentially faster performance.
+This mode, corresponding to the `ProcessPoolClientTrainer` class, offers excellent performance. It utilizes efficient shared memory for Inter-Process Communication (IPC) to minimize overhead when transferring model parameters between processes.
 
 ```mermaid
 graph LR
@@ -86,7 +84,7 @@ graph LR
     end
 
     subgraph "ProcessPoolClientTrainer (e.g. Max Processes = 3)"
-      SHM[("<center>Shared Memory<br>or<br>Storage</center>")]
+      SHM[("<center>Shared Memory</center>")]
       SPJ1@{ shape: f-circ, label: "Junction" }
       subgraph "Process 1"
         SP1[Client 1] --> SP4[Client 4]
