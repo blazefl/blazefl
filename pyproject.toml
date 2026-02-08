@@ -84,5 +84,4 @@ fixable = ["ALL"]
 members = [
     "examples/quickstart-fedavg",
     "examples/step-by-step-dsfl",
-    "benchmarks/blazefl-benchmark",
 ]
