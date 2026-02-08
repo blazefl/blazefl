@@ -37,6 +37,7 @@ typeCheckingMode = "standard"
 
 [tool.mypy]
 exclude = [
+    "benchmarks",
     "docs",
     "examples",
 ]
@@ -83,4 +84,5 @@ fixable = ["ALL"]
 members = [
     "examples/quickstart-fedavg",
     "examples/step-by-step-dsfl",
+    "benchmarks/blazefl-benchmark",
 ]

@@ -33,6 +33,11 @@ fixable = ["ALL"]
 [tool.ruff.lint.isort]
 known-third-party = ["wandb"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["models*", "dataset*"]
+exclude = ["outputs*", "wandb*"]
+
 [tool.uv.sources]
 blazefl = { workspace = true }
 

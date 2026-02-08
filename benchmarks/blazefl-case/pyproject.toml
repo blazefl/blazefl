@@ -1,0 +1,40 @@
+[project]
+name = "blazefl-case"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "blazefl[contrib,reproducibility]>=2.0.3",
+    "quickstart-fedavg",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "typer>=0.21.1",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.0",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "UP",  # pyupgrade
+    "B",  # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "I",  # isort
+]
+ignore = []
+fixable = ["ALL"]
+
+[tool.uv.sources]
+quickstart-fedavg = { path = "../../examples/quickstart-fedavg", editable = true }

@@ -1,0 +1,57 @@
+[project]
+name = "flower-case"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flwr-datasets[vision]>=0.5.0",
+    "flwr[simulation]>=1.26.1",
+    "ray[default]>=2.51.1",
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+
+[tool.flwr.app]
+publisher = "blazefl"
+
+[tool.flwr.app.components]
+serverapp = "example.server:app"
+clientapp = "example.client:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 5
+fraction-evaluate = 0.0
+local-epochs = 5
+learning-rate = 0.1
+batch-size = 50
+model-name = "CNN"
+
+[[tool.mypy.overrides]]
+module = [
+    "datasets.*",
+    "flwr_datasets.*",
+    "torchvision.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "UP",  # pyupgrade
+    "B",  # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "I",  # isort
+]
+ignore = []
+fixable = ["ALL"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.0",
+]

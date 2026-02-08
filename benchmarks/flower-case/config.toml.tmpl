@@ -1,0 +1,11 @@
+[superlink]
+default = "local"
+
+[superlink.supergrid]
+address = "supergrid.flower.ai"
+
+[superlink.local]
+options.num-supernodes = 100
+options.backend.name = "ray"
+options.backend.client-resources.num-cpus = 2
+options.backend.client-resources.num-gpus = 0.0
