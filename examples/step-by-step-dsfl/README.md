@@ -21,14 +21,14 @@ cd step-by-step-dsfl
 Next, Initialize the project with [uv](https://github.com/astral-sh/uv) (or any other package manager of your choice).
 
 ```bash
-uv python pin 3.14
-uv init -p 3.14
+uv python pin 3.14t
+uv init -p 3.14t
 ```
 
 Then, create a virtual environment and install BlazeFL. 
 
 ```bash
-uv venv -p 3.14
+uv venv -p 3.14t
 # source .venv/bin/activate
 uv add "blazefl[reproducibility]"
 ```
@@ -273,18 +273,14 @@ However, you have the flexibility to place any custom operations in these or oth
 You can find more details in the [official documentation](https://blazefl.github.io/blazefl/generated/blazefl.core.BaseServerHandler.html#blazefl.core.BaseServerHandler).
 
 
-## Implementing a ProcessPoolClientTrainer
+## Implementing a ThreadPoolClientTrainer
 
-Traditional FL frameworks often train each client sequentially and upload parameters to the server.
-With BlazeFL, the `ProcessPoolClientTrainer` class lets you train multiple clients in parallel while retaining full extensibility.
+Traditional FL frameworks often train each client sequentially or manage complex multiprocessing setups.
+With BlazeFL, the `ThreadPoolClientTrainer` class lets you train multiple clients in parallel using threads, which can be sufficient and simpler for many simulation scenarios, especially when managing lightweight models or when I/O bound.
 
 An example DS-FL client trainer looks like this:
 
 ```python
-@dataclass
-class DSFLClientConfig:
-    # Omitted for brevity
-
 @dataclass
 class DSFLClientState:
     random: RNGSuite
@@ -293,101 +289,91 @@ class DSFLClientState:
     kd_optimizer: dict[str, torch.Tensor] | None
 
 
-class DSFLProcessPoolClientTrainer(
-    ProcessPoolClientTrainer[DSFLUplinkPackage, DSFLDownlinkPackage, DSFLClientConfig]
+class DSFLThreadPoolClientTrainer(
+    ThreadPoolClientTrainer[DSFLUplinkPackage, DSFLDownlinkPackage]
 ):
     # Omitted for brevity
 
-    @staticmethod
     def worker(
-        config: DSFLClientConfig | Path,
-        payload: DSFLDownlinkPackage | Path,
+        self,
+        cid: int,
         device: str,
+        payload: DSFLDownlinkPackage,
         stop_event: threading.Event,
-    ) -> Path:
-        assert isinstance(config, Path) and isinstance(payload, Path)
-        config_path, payload_path = config, payload
-        c = torch.load(config_path, weights_only=False)
-        p = torch.load(payload_path, weights_only=False)
-        assert isinstance(c, DSFLClientConfig) and isinstance(p, DSFLDownlinkPackage)
-
-        setup_reproducibility(c.seed)
-
-        model = c.model_selector.select_model(c.model_name)
-        optimizer = torch.optim.SGD(model.parameters(), lr=c.lr)
+    ) -> DSFLUplinkPackage:
+        model = self.model_selector.select_model(self.model_name)
+        optimizer = torch.optim.SGD(model.parameters(), lr=self.lr)
         kd_optimizer: torch.optim.SGD | None = None
 
-        state: DSFLClientState | None = None
-        if c.state_path.exists():
-            state = torch.load(c.state_path, weights_only=False)
-            assert isinstance(state, DSFLClientState)
+        if cid in self.client_states:
+            state = self.client_states[cid]
             rng_suite = state.random
             model.load_state_dict(state.model)
             optimizer.load_state_dict(state.optimizer)
             if state.kd_optimizer is not None:
-                kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
+                kd_optimizer = torch.optim.SGD(model.parameters(), lr=self.kd_lr)
                 kd_optimizer.load_state_dict(state.kd_optimizer)
         else:
-            rng_suite = create_rng_suite(c.seed)
+            rng_suite = create_rng_suite(self.seed)
 
         # Distill
-        open_dataset = c.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
-        if p.indices is not None and p.soft_labels is not None:
-            global_soft_labels = list(torch.unbind(p.soft_labels, dim=0))
-            global_indices = p.indices.tolist()
+        open_dataset = self.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
+        if payload.indices is not None and payload.soft_labels is not None:
+            global_soft_labels = list(torch.unbind(payload.soft_labels, dim=0))
+            global_indices = payload.indices.tolist()
             if kd_optimizer is None:
-                kd_optimizer = torch.optim.SGD(model.parameters(), lr=c.kd_lr)
+                kd_optimizer = torch.optim.SGD(model.parameters(), lr=self.kd_lr)
 
             open_loader = DataLoader(
                 Subset(open_dataset, global_indices),
-                batch_size=c.kd_batch_size,
+                batch_size=self.kd_batch_size,
             )
             DSFLBaseServerHandler.distill(
                 model=model,
                 optimizer=kd_optimizer,
                 open_loader=open_loader,
                 global_soft_labels=global_soft_labels,
-                kd_epochs=c.kd_epochs,
-                kd_batch_size=c.kd_batch_size,
+                kd_epochs=self.kd_epochs,
+                kd_batch_size=self.kd_batch_size,
                 device=device,
                 stop_event=stop_event,
             )
 
         # Train
-        train_loader = c.dataset.get_dataloader(
+        train_loader = self.dataset.get_dataloader(
             type_=DSFLPartitionType.TRAIN,
-            cid=c.cid,
-            batch_size=c.batch_size,
+            cid=cid,
+            batch_size=self.batch_size,
             generator=rng_suite.torch_cpu,
         )
-        DSFLProcessPoolClientTrainer.train(
+        DSFLThreadPoolClientTrainer.train(
             model=model,
             optimizer=optimizer,
             train_loader=train_loader,
             device=device,
-            epochs=c.epochs,
+            epochs=self.epochs,
             stop_event=stop_event,
         )
-        c.dataset.set_dataset(
-            dataset=train_loader.dataset, type_=DSFLPartitionType.TRAIN, cid=c.cid
+        self.dataset.set_dataset(
+            dataset=train_loader.dataset, type_=DSFLPartitionType.TRAIN, cid=cid
         )
 
         # Predict
         open_loader = DataLoader(
-            Subset(open_dataset, p.next_indices.tolist()),
-            batch_size=c.batch_size,
+            Subset(open_dataset, payload.next_indices.tolist()),
+            batch_size=self.batch_size,
         )
-        soft_labels = DSFLProcessPoolClientTrainer.predict(
+        soft_labels = DSFLThreadPoolClientTrainer.predict(
             model=model,
             open_loader=open_loader,
             device=device,
         )
 
         # Evaluate
-        test_loader = c.dataset.get_dataloader(
+        test_loader = self.dataset.get_dataloader(
             type_=DSFLPartitionType.TEST,
-            cid=c.cid,
-            batch_size=c.batch_size,
+            cid=cid,
+            batch_size=self.batch_size,
         )
         loss, acc = DSFLBaseServerHandler.evaulate(
             model=model,
@@ -396,38 +382,20 @@ class DSFLProcessPoolClientTrainer(
         )
 
         package = DSFLUplinkPackage(
-            cid=c.cid,
+            cid=cid,
             soft_labels=soft_labels,
-            indices=p.next_indices,
+            indices=payload.next_indices,
             metadata={"loss": loss, "acc": acc},
         )
 
-        torch.save(package, config_path)
-        state = DSFLClientState(
+        self.client_states[cid] = DSFLClientState(
             random=rng_suite,
             model=model.state_dict(),
             optimizer=optimizer.state_dict(),
             kd_optimizer=kd_optimizer.state_dict() if kd_optimizer else None,
         )
-        torch.save(state, c.state_path)
-        return config_path
 
-    def get_client_config(self, cid: int) -> DSFLClientConfig:
-        data = DSFLClientConfig(
-            model_selector=self.model_selector,
-            model_name=self.model_name,
-            dataset=self.dataset,
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            lr=self.lr,
-            kd_epochs=self.kd_epochs,
-            kd_batch_size=self.kd_batch_size,
-            kd_lr=self.kd_lr,
-            cid=cid,
-            seed=self.seed,
-            state_path=self.state_dir.joinpath(f"{cid}.pt"),
-        )
-        return data
+        return package
 
     def uplink_package(self) -> list[DSFLUplinkPackage]:
         package = deepcopy(self.cache)
@@ -435,15 +403,12 @@ class DSFLProcessPoolClientTrainer(
         return package
 ```
 
-This class uses Python’s standard library multiprocessing (wrapped under BlazeFL) to train clients concurrently.
-You mainly need to implement:
+This class uses Python’s `threading` library (wrapped under BlazeFL) to train clients concurrently. You mainly need to implement:
 
-- `worker` (a static method called by child processes)
-- `get_client_config` (to prepare the config shared across processes)
+- `worker` (called by threads to process each client)
 - `uplink_package` (to send final results back to the server)
 
-By storing shared data on disk instead of passing it directly, you avoid complex shared memory management.
-This design makes it straightforward to enable parallel training.
+Unlike process-based training, threads share the same memory space, making it easy to manage state using a simple dictionary (`self.client_states`) without complex serialization.
 
 The complete source code is [here](https://github.com/blazefl/blazefl/tree/main/examples/step-by-step-dsfl/algorithm/dsfl.py).
 
@@ -457,7 +422,7 @@ class DSFLPipeline:
     def __init__(
         self,
         handler: DSFLBaseServerHandler,
-        trainer: DSFLProcessPoolClientTrainer,
+        trainer: DSFLThreadPoolClientTrainer,
         run: wandb.Run,
     ) -> None:
         self.handler = handler

@@ -7,7 +7,6 @@ including client trainers, model selectors, partitioned datasets, and server han
 
 from blazefl.core.client_trainer import (
     BaseClientTrainer,
-    IPCMode,
     ProcessPoolClientTrainer,
     ThreadPoolClientTrainer,
 )
@@ -27,7 +26,6 @@ __all__ = [
     "FilteredDataset",
     "ProcessPoolClientTrainer",
     "ThreadPoolClientTrainer",
-    "IPCMode",
     "ModelSelector",
     "PartitionedDataset",
     "BaseServerHandler",
