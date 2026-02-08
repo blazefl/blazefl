@@ -37,6 +37,7 @@ typeCheckingMode = "standard"
 
 [tool.mypy]
 exclude = [
+    "benchmarks",
     "docs",
     "examples",
 ]

@@ -1,3 +1,3 @@
-from models.selector import FedAvgModelSelector
+from models.selector import FedAvgModelName, FedAvgModelSelector
 
-__all__ = ["FedAvgModelSelector"]
+__all__ = ["FedAvgModelSelector", "FedAvgModelName"]

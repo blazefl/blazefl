@@ -1,0 +1,45 @@
+[project]
+name = "benchmarks"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2.4.2",
+    "rich>=14.3.2",
+    "toml>=0.10.2",
+    "torch>=2.10.0",
+    "typer>=0.21.1",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.0",
+    "types-toml>=0.10.8.20240310",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+
+[tool.mypy]
+exclude = [
+    "blazefl-case",
+    "flower-case",
+]
+
+[tool.ruff.lint]
+exclude = [
+    "blazefl-case",
+    "flower-case",
+]
+select = [
+    "E",  # pycodestyle
+    "F",  # Pyflakes
+    "UP",  # pyupgrade
+    "B",  # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "I",  # isort
+]
+ignore = []
+fixable = ["ALL"]
