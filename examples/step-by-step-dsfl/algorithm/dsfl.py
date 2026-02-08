@@ -341,7 +341,7 @@ class DSFLThreadPoolClientTrainer(
                     assert kd_optimizer is not None
                     kd_optimizer.load_state_dict(state.kd_optimizer)
             else:
-                rng_suite = create_rng_suite(self.seed)
+                rng_suite = create_rng_suite(self.seed + cid)
 
         # Distill
         open_dataset = self.dataset.get_dataset(type_=DSFLPartitionType.OPEN, cid=None)
