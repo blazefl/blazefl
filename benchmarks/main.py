@@ -110,8 +110,9 @@ def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> N
         for mode in execution_modes:
             blazefl_command = (
                 "cd blazefl-case && "
-                "uv run python main.py "
-                f"--model={model_name} "
+                "uv run python "
+                f"{'-Xgil=0' if mode == 'MULTI_THREADED' else ''} main.py "
+                f"--model-name={model_name} "
                 f"--execution-mode={mode} "
                 f"--num-parallels={num_parallel} "
             )
