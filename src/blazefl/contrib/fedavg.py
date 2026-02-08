@@ -14,7 +14,6 @@ from tqdm import tqdm
 from blazefl.core import (
     BaseClientTrainer,
     BaseServerHandler,
-    IPCMode,
     ModelSelector,
     PartitionedDataset,
     ProcessPoolClientTrainer,
@@ -474,7 +473,6 @@ class FedAvgProcessPoolClientTrainer(
     Attributes:
         model_selector (ModelSelector): Selector for initializing the local model.
         model_name (str): Name of the model to be used.
-        share_dir (Path): Directory to store shared data files between processes.
         state_dir (Path): Directory to save random states for reproducibility.
         dataset (PartitionedDataset): Dataset partitioned across clients.
         device (str): Device to run the models on ('cpu' or 'cuda').
@@ -484,8 +482,6 @@ class FedAvgProcessPoolClientTrainer(
         lr (float): Learning rate for the optimizer.
         seed (int): Seed for reproducibility.
         num_parallels (int): Number of parallel processes for training.
-        ipc_mode (Literal["storage", "shared_memory"]):
-            Inter-process communication mode.
         device_count (int | None): Number of CUDA devices available (if using GPU).
     """
 
@@ -493,7 +489,6 @@ class FedAvgProcessPoolClientTrainer(
         self,
         model_selector: ModelSelector,
         model_name: str,
-        share_dir: Path,
         state_dir: Path,
         dataset: FedAvgPartitionedDataset,
         device: str,
@@ -503,7 +498,6 @@ class FedAvgProcessPoolClientTrainer(
         lr: float,
         seed: int,
         num_parallels: int,
-        ipc_mode: IPCMode,
     ) -> None:
         """
         Initialize the FedAvgParalleClientTrainer.
@@ -511,7 +505,6 @@ class FedAvgProcessPoolClientTrainer(
         Args:
             model_selector (ModelSelector): Selector for initializing the local model.
             model_name (str): Name of the model to be used.
-            share_dir (Path): Directory to store shared data files between processes.
             state_dir (Path): Directory to save random states for reproducibility.
             dataset (PartitionedDataset): Dataset partitioned across clients.
             device (str): Device to run the models on ('cpu' or 'cuda').
@@ -523,8 +516,6 @@ class FedAvgProcessPoolClientTrainer(
             num_parallels (int): Number of parallel processes for training.
         """
         self.num_parallels = num_parallels
-        self.share_dir = share_dir
-        self.share_dir.mkdir(parents=True, exist_ok=True)
         self.device = device
         if self.device == "cuda":
             self.device_count = torch.cuda.device_count()
@@ -541,7 +532,6 @@ class FedAvgProcessPoolClientTrainer(
         self.device = device
         self.num_clients = num_clients
         self.seed = seed
-        self.ipc_mode = ipc_mode
         self.manager = mp.Manager()
         self.stop_event = self.manager.Event()
 
@@ -564,13 +554,13 @@ class FedAvgProcessPoolClientTrainer(
 
     @staticmethod
     def worker(
-        config: FedAvgClientConfig | Path,
-        payload: FedAvgDownlinkPackage | Path,
+        config: FedAvgClientConfig,
+        payload: FedAvgDownlinkPackage,
         device: str,
         stop_event: threading.Event,
         *,
         shm_buffer: FedAvgProcessPoolUplinkPackage | None = None,
-    ) -> FedAvgProcessPoolUplinkPackage | Path:
+    ) -> FedAvgProcessPoolUplinkPackage:
         """
         Process a single client's local training and evaluation.
 
@@ -579,98 +569,58 @@ class FedAvgProcessPoolClientTrainer(
         and returning the result.
 
         Args:
-            config (FedAvgClientConfig | Path):
-                The client's configuration data, or a path to a file containing
-                the configuration if `ipc_mode` is "storage".
-            payload (FedAvgDownlinkPackage | Path):
-                The downlink payload from the server, or a path to a file
-                containing the payload if `ipc_mode` is "storage".
+            config (FedAvgClientConfig):
+                The client's configuration data.
+            payload (FedAvgDownlinkPackage):
+                The downlink payload from the server.
             device (str): Device to use for processing (e.g., "cpu", "cuda:0").
             shm_buffer (FedAvgProcessPoolUplinkPackage | None):
                 Optional shared memory buffer for the uplink package.
 
         Returns:
-            FedAvgUplinkPackage | Path:
-                The uplink package containing the client's results, or a path to
-                a file containing the package if `ipc_mode` is "storage".
+            FedAvgUplinkPackage:
+                The uplink package containing the client's results.
         """
 
-        def _storage_worker(
-            config_path: Path,
-            payload_path: Path,
-            device: str,
-            stop_event: threading.Event,
-        ) -> Path:
-            config = torch.load(config_path, weights_only=False)
-            assert isinstance(config, FedAvgClientConfig)
-            payload = torch.load(payload_path, weights_only=False)
-            assert isinstance(payload, FedAvgDownlinkPackage)
-            package = _shared_memory_worker(
-                config=config,
-                payload=payload,
-                device=device,
-                stop_event=stop_event,
-            )
-            torch.save(package, config_path)
-            return config_path
-
-        def _shared_memory_worker(
-            config: FedAvgClientConfig,
-            payload: FedAvgDownlinkPackage,
-            device: str,
-            stop_event: threading.Event,
-        ) -> FedAvgProcessPoolUplinkPackage:
-            setup_reproducibility(config.seed)
-            if config.state_path.exists():
-                state = torch.load(config.state_path, weights_only=False)
-                assert isinstance(state, RNGSuite)
-            else:
-                state = create_rng_suite(config.seed)
-
-            model = config.model_selector.select_model(config.model_name)
-            train_loader = config.dataset.get_dataloader(
-                type_=FedAvgPartitionType.TRAIN,
-                cid=config.cid,
-                batch_size=config.batch_size,
-                generator=state.torch_cpu,
-            )
-            package = FedAvgProcessPoolClientTrainer.train(
-                model=model,
-                model_parameters=payload.model_parameters,
-                train_loader=train_loader,
-                device=device,
-                epochs=config.epochs,
-                lr=config.lr,
-                stop_event=stop_event,
-                cid=config.cid,
-            )
-            torch.save(state, config.state_path)
-            config.dataset.set_dataset(
-                type_=FedAvgPartitionType.TRAIN,
-                cid=config.cid,
-                dataset=train_loader.dataset,
-            )
-            return package
-
-        if isinstance(config, Path) and isinstance(payload, Path):
-            return _storage_worker(config, payload, device, stop_event)
-        elif isinstance(config, FedAvgClientConfig) and isinstance(
-            payload, FedAvgDownlinkPackage
-        ):
-            package = _shared_memory_worker(config, payload, device, stop_event)
-            assert (
-                shm_buffer is not None
-                and isinstance(shm_buffer.model_parameters, torch.Tensor)
-                and isinstance(package.model_parameters, torch.Tensor)
-            )
-            shm_buffer.model_parameters.copy_(package.model_parameters)
-            package.model_parameters = SHMHandle()
-            return package
+        setup_reproducibility(config.seed)
+        if config.state_path.exists():
+            state = torch.load(config.state_path, weights_only=False)
+            assert isinstance(state, RNGSuite)
         else:
-            raise TypeError(
-                "Invalid types for config and payload."
-                " Expected FedAvgClientConfig and FedAvgDownlinkPackage or Path."
-            )
+            state = create_rng_suite(config.seed)
+
+        model = config.model_selector.select_model(config.model_name)
+        train_loader = config.dataset.get_dataloader(
+            type_=FedAvgPartitionType.TRAIN,
+            cid=config.cid,
+            batch_size=config.batch_size,
+            generator=state.torch_cpu,
+        )
+        package = FedAvgProcessPoolClientTrainer.train(
+            model=model,
+            model_parameters=payload.model_parameters,
+            train_loader=train_loader,
+            device=device,
+            epochs=config.epochs,
+            lr=config.lr,
+            stop_event=stop_event,
+            cid=config.cid,
+        )
+        torch.save(state, config.state_path)
+        config.dataset.set_dataset(
+            type_=FedAvgPartitionType.TRAIN,
+            cid=config.cid,
+            dataset=train_loader.dataset,
+        )
+
+        assert (
+            shm_buffer is not None
+            and isinstance(shm_buffer.model_parameters, torch.Tensor)
+            and isinstance(package.model_parameters, torch.Tensor)
+        )
+        shm_buffer.model_parameters.copy_(package.model_parameters)
+        package.model_parameters = SHMHandle()
+        return package
 
     @staticmethod
     def train(

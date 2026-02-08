@@ -14,7 +14,6 @@ from blazefl.contrib import (
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
 )
-from blazefl.core import IPCMode
 from blazefl.reproducibility import setup_reproducibility
 from dataset import PartitionedCIFAR10
 from models import FedAvgModelName, FedAvgModelSelector
@@ -78,16 +77,13 @@ def main(
     batch_size: int = 50,
     num_parallels: int = 10,
     dataset_root_dir: Path = Path("/tmp/blazefl-case/dataset"),
-    share_dir_base: Path = Path("/tmp/blazefl-case/share"),
     state_dir_base: Path = Path("/tmp/blazefl-case/state"),
     execution_mode: ExecutionMode = EXECUTION_MODE,
-    ipc_mode: IPCMode = IPCMode.SHARED_MEMORY,
 ):
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dataset_split_dir = dataset_root_dir / timestamp
-    share_dir = share_dir_base / timestamp
     state_dir = state_dir_base / timestamp
 
     device = "cpu"
@@ -144,7 +140,6 @@ def main(
                 model_selector=model_selector,
                 model_name=model_name,
                 dataset=dataset,
-                share_dir=share_dir,
                 state_dir=state_dir,
                 seed=seed,
                 device=device,
@@ -153,7 +148,6 @@ def main(
                 lr=lr,
                 batch_size=batch_size,
                 num_parallels=num_parallels,
-                ipc_mode=ipc_mode,
             )
         case ExecutionMode.MULTI_THREADED:
             assert not sys._is_gil_enabled()

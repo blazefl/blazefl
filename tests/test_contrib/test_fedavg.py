@@ -10,7 +10,6 @@ import torch
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, Dataset
 
-from blazefl.core.client_trainer import IPCMode
 from src.blazefl.contrib.fedavg import (
     FedAvgBaseClientTrainer,
     FedAvgBaseServerHandler,
@@ -100,12 +99,6 @@ def device():
 
 
 @pytest.fixture
-def tmp_share_dir(tmp_path):
-    share_dir = tmp_path / "share"
-    return share_dir
-
-
-@pytest.fixture
 def tmp_state_dir(tmp_path):
     state_dir = tmp_path / "state"
     return state_dir
@@ -171,9 +164,8 @@ def _run_process_pool_trainer(
         trainer.local_process(downlink, cids)
 
 
-@pytest.mark.parametrize("ipc_mode", [IPCMode.STORAGE, IPCMode.SHARED_MEMORY])
 def test_base_handler_and_process_pool_trainer_integration(
-    model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir, ipc_mode
+    model_selector, partitioned_dataset, device, tmp_state_dir
 ):
     mp.set_start_method("spawn", force=True)
 
@@ -202,7 +194,6 @@ def test_base_handler_and_process_pool_trainer_integration(
     trainer = FedAvgProcessPoolClientTrainer(
         model_selector=model_selector,
         model_name=model_name,
-        share_dir=tmp_share_dir,
         state_dir=tmp_state_dir,
         dataset=partitioned_dataset,
         device=device,
@@ -212,7 +203,6 @@ def test_base_handler_and_process_pool_trainer_integration(
         lr=lr,
         seed=seed,
         num_parallels=num_parallels,
-        ipc_mode=ipc_mode,
     )
 
     for round_ in range(1, global_round + 1):
@@ -232,7 +222,7 @@ def test_base_handler_and_process_pool_trainer_integration(
 
 
 def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
-    model_selector, partitioned_dataset, device, tmp_share_dir, tmp_state_dir
+    model_selector, partitioned_dataset, device, tmp_state_dir
 ):
     mp.set_start_method("spawn", force=True)
 
@@ -261,7 +251,6 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
     trainer_init_args = {
         "model_selector": model_selector,
         "model_name": model_name,
-        "share_dir": tmp_share_dir,
         "state_dir": tmp_state_dir,
         "dataset": partitioned_dataset,
         "device": device,
@@ -271,7 +260,6 @@ def test_base_handler_and_process_pool_trainer_integration_keyboard_interrupt(
         "lr": lr,
         "seed": seed,
         "num_parallels": num_parallels,
-        "ipc_mode": "storage",
     }
 
     cids = server.sample_clients()

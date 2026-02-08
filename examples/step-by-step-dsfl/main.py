@@ -12,12 +12,11 @@ from pathlib import Path
 from typing import Annotated
 
 import torch
-import torch.multiprocessing as mp
 import typer
 import wandb
 from blazefl.reproducibility import setup_reproducibility
 
-from algorithm import DSFLBaseServerHandler, DSFLProcessPoolClientTrainer
+from algorithm import DSFLBaseServerHandler, DSFLThreadPoolClientTrainer
 from dataset import DSFLPartitionedDataset
 from models import DSFLModelName, DSFLModelSelector
 
@@ -26,7 +25,7 @@ class DSFLPipeline:
     def __init__(
         self,
         handler: DSFLBaseServerHandler,
-        trainer: DSFLProcessPoolClientTrainer,
+        trainer: DSFLThreadPoolClientTrainer,
         run: wandb.Run,
     ) -> None:
         self.handler = handler
@@ -106,9 +105,6 @@ def main(
     dataset_root_dir: Annotated[
         Path, typer.Option(help="Root directory for the dataset.")
     ] = Path("/tmp/step-by-step-dsfl/dataset"),
-    share_dir_base: Annotated[
-        Path, typer.Option(help="Base directory for sharing data between processes.")
-    ] = Path("/tmp/step-by-step-dsfl/share"),
     state_dir_base: Annotated[
         Path, typer.Option(help="Directory path for saving data between processes.")
     ] = Path("/tmp/step-by-step-dsfl/state"),
@@ -143,7 +139,6 @@ def main(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dataset_split_dir = dataset_root_dir / timestamp
-    share_dir = share_dir_base / timestamp
     state_dir = state_dir_base / timestamp
 
     setup_reproducibility(seed)
@@ -174,11 +169,10 @@ def main(
         sample_ratio=sample_ratio,
         seed=seed,
     )
-    trainer = DSFLProcessPoolClientTrainer(
+    trainer = DSFLThreadPoolClientTrainer(
         model_selector=model_selector,
         model_name=model_name,
         dataset=dataset,
-        share_dir=share_dir,
         state_dir=state_dir,
         seed=seed,
         device=device,
@@ -200,7 +194,4 @@ def main(
 
 
 if __name__ == "__main__":
-    # NOTE: To use CUDA with multiprocessing, you must use the 'spawn' start method
-    mp.set_start_method("spawn")
-
     typer.run(main)

@@ -21,7 +21,6 @@ from blazefl.contrib import (
     FedAvgProcessPoolClientTrainer,
     FedAvgThreadPoolClientTrainer,
 )
-from blazefl.core import IPCMode
 from blazefl.reproducibility import setup_reproducibility
 
 from dataset import PartitionedCIFAR10
@@ -120,9 +119,6 @@ def main(
     dataset_root_dir: Annotated[
         Path, typer.Option(help="Root directory for the dataset.")
     ] = Path("/tmp/quickstart-fedavg/dataset"),
-    share_dir_base: Annotated[
-        Path, typer.Option(help="Base directory for sharing data between processes.")
-    ] = Path("/tmp/quickstart-fedavg/share"),
     state_dir_base: Annotated[
         Path, typer.Option(help="Directory path for saving data between processes.")
     ] = Path("/tmp/quickstart-fedavg/state"),
@@ -135,13 +131,6 @@ def main(
             )
         ),
     ] = "multi-threaded",
-    ipc_mode: Annotated[
-        IPCMode,
-        typer.Option(
-            help="Inter-process communication mode. 'STORAGE' uses disk for data "
-            "exchange, 'SHARED_MEMORY' uses shared memory for tensor data."
-        ),
-    ] = IPCMode.SHARED_MEMORY,
 ) -> None:
     device = "cpu"
     if torch.cuda.is_available():
@@ -157,7 +146,6 @@ def main(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dataset_split_dir = dataset_root_dir / timestamp
-    share_dir = share_dir_base / timestamp
     state_dir = state_dir_base / timestamp
 
     setup_reproducibility(seed)
@@ -208,7 +196,6 @@ def main(
                 model_selector=model_selector,
                 model_name=model_name,
                 dataset=dataset,
-                share_dir=share_dir,
                 state_dir=state_dir,
                 seed=seed,
                 device=device,
@@ -217,7 +204,6 @@ def main(
                 lr=lr,
                 batch_size=batch_size,
                 num_parallels=num_parallels,
-                ipc_mode=ipc_mode,
             )
         case "multi-threaded":
             trainer = FedAvgThreadPoolClientTrainer(
