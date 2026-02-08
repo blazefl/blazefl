@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import statistics
@@ -100,31 +101,30 @@ def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> N
     cpu_count = os.cpu_count() or 1
     gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-    # num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
-    num_parallels: list[int] = [4, 8]
+    num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
 
     for num_parallel in num_parallels:
         results: list[Result] = []
 
-        # execution_modes = ["MULTI_THREADED", "MULTI_PROCESS"]
-        # for mode in execution_modes:
-        #     blazefl_command = (
-        #         "cd blazefl-case && "
-        #         "uv run python main.py "
-        #         f"--model={model_name} "
-        #         f"--execution-mode={mode} "
-        #         f"--num-parallels={num_parallel} "
-        #     )
-        #     blazefl_times = run_benchmark(blazefl_command, num_runs)
-        #     if blazefl_times:
-        #         result = Result(
-        #             method="BlazeFL",
-        #             avg_time=statistics.mean(blazefl_times),
-        #             std_time=statistics.stdev(blazefl_times)
-        #             if len(blazefl_times) > 1
-        #             else 0.0,
-        #         )
-        #         results.append(result)
+        execution_modes = ["MULTI_THREADED", "MULTI_PROCESS"]
+        for mode in execution_modes:
+            blazefl_command = (
+                "cd blazefl-case && "
+                "uv run python main.py "
+                f"--model={model_name} "
+                f"--execution-mode={mode} "
+                f"--num-parallels={num_parallel} "
+            )
+            blazefl_times = run_benchmark(blazefl_command, num_runs)
+            if blazefl_times:
+                result = Result(
+                    method="BlazeFL",
+                    avg_time=statistics.mean(blazefl_times),
+                    std_time=statistics.stdev(blazefl_times)
+                    if len(blazefl_times) > 1
+                    else 0.0,
+                )
+                results.append(result)
 
         client_cpus = cpu_count // num_parallel
         client_gpus = gpu_count / num_parallel
