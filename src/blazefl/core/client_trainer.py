@@ -61,7 +61,6 @@ class ProcessPoolClientTrainer(
 
     Attributes:
         num_parallels (int): Number of parallel processes to use for client training.
-        share_dir (Path): Directory path for sharing data between processes.
         device (str): The primary device to use for computation (e.g., "cpu", "cuda").
         device_count (int): The number of available CUDA devices, if `device` is "cuda".
         cache (list[UplinkPackage]): Cache to store uplink packages from clients.
