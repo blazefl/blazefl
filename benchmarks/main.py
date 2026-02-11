@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import re
 import statistics
@@ -11,6 +10,7 @@ from typing import Literal, NamedTuple
 import toml
 import torch
 import typer
+import wandb
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import track
@@ -82,6 +82,11 @@ class Result(NamedTuple):
     std_time: float
 
 
+class BenchmarkEntry(NamedTuple):
+    result: Result
+    num_parallel: int
+
+
 def display_results(title: str, results: list[Result]) -> None:
     console = Console()
 
@@ -96,12 +101,35 @@ def display_results(title: str, results: list[Result]) -> None:
     console.print(table)
 
 
+def log_result(num_parallel: int, result: Result) -> None:
+    wandb.log(
+        {
+            "num_parallel": num_parallel,
+            f"benchmark/{result.method}/avg_time": result.avg_time,
+            f"benchmark/{result.method}/std_time": result.std_time,
+        }
+    )
+
+
 def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> None:
     logging.info("Starting benchmark...")
     cpu_count = os.cpu_count() or 1
     gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-    num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
+    # num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
+    num_parallels: list[int] = [4, 6]
+
+    wandb_config = {
+        "model_name": model_name,
+        "num_runs": num_runs,
+        "cpu_count": cpu_count,
+        "gpu_count": gpu_count,
+    }
+    run = wandb.init(config=wandb_config)
+    run.define_metric("num_parallel")
+    run.define_metric("benchmark/*", step_metric="num_parallel")
+
+    data: list[BenchmarkEntry] = []
 
     for num_parallel in num_parallels:
         results: list[Result] = []
@@ -118,14 +146,18 @@ def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> N
             )
             blazefl_times = run_benchmark(blazefl_command, num_runs)
             if blazefl_times:
+                method_name = f"BlazeFL ({mode})"
+                avg_time = statistics.mean(blazefl_times)
+                std_time = (
+                    statistics.stdev(blazefl_times) if len(blazefl_times) > 1 else 0.0
+                )
                 result = Result(
-                    method="BlazeFL",
-                    avg_time=statistics.mean(blazefl_times),
-                    std_time=statistics.stdev(blazefl_times)
-                    if len(blazefl_times) > 1
-                    else 0.0,
+                    method=method_name,
+                    avg_time=avg_time,
+                    std_time=std_time,
                 )
                 results.append(result)
+                log_result(num_parallel, result)
 
         client_cpus = cpu_count // num_parallel
         client_gpus = gpu_count / num_parallel
@@ -146,24 +178,53 @@ def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> N
 
         flower_command = (
             "cd flower-case && "
+            "RAY_TMPDIR=/tmp/flower-case "
             "FLWR_HOME=$(pwd) "
             "uv run flwr run . local "
             f"--run-config 'model-name=\"{model_name}\"' "
+            "&& rm -rf ${RAY_TMPDIR} "
             "&& cd .."
         )
         flower_times = run_benchmark(flower_command, num_runs)
         if flower_times:
+            method_name = "Flower"
+            avg_time = statistics.mean(flower_times)
+            std_time = statistics.stdev(flower_times) if len(flower_times) > 1 else 0.0
             result = Result(
-                method="Flower",
-                avg_time=statistics.mean(flower_times),
-                std_time=statistics.stdev(flower_times)
-                if len(flower_times) > 1
-                else 0.0,
+                method=method_name,
+                avg_time=avg_time,
+                std_time=std_time,
             )
             results.append(result)
+            log_result(num_parallel, result)
 
+        data.extend(
+            [
+                BenchmarkEntry(result=result, num_parallel=num_parallel)
+                for result in results
+            ]
+        )
         display_results(f"FedAvg Benchmark ({num_parallel=})", results)
+
+    table_columns = ["num_parallel", "method", "avg_time", "std_time"]
+    table_data = [
+        [
+            entry.num_parallel,
+            entry.result.method,
+            entry.result.avg_time,
+            entry.result.std_time,
+        ]
+        for entry in data
+    ]
+
+    wandb.log(
+        {
+            "benchmark_table": wandb.Table(columns=table_columns, data=table_data),
+        }
+    )
+
     logging.info("Benchmark finished.")
+    run.finish()
 
 
 if __name__ == "__main__":
