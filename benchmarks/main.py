@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import statistics
@@ -116,8 +117,7 @@ def main(num_runs: int = 3, model_name: Literal["CNN", "RESNET18"] = "CNN") -> N
     cpu_count = os.cpu_count() or 1
     gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-    # num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
-    num_parallels: list[int] = [4, 6]
+    num_parallels: list[int] = [2**i for i in range(int(math.log2(cpu_count) + 1))]
 
     wandb_config = {
         "model_name": model_name,
